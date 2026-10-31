@@ -8,13 +8,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Oswald:wght@500;600&family=PT+Sans:wght@400;700&display=swap">
-  <link rel="stylesheet" href="css/style.css?v=202610312059">
+  <link rel="stylesheet" href="css/style.css?v=202610312112">
 </head>
 <body>
   <header class="top">
     <a class="brand" href="https://wirkenrus.com" target="_blank" rel="noopener" title="wirkenrus.com">
-      <img class="brand-logo logo-light" src="img/logo.png?v=202610312059" alt="wirken" width="351" height="67">
-      <img class="brand-logo logo-dark" src="img/logo-dark.png?v=202610312059" alt="wirken" width="351" height="67">
+      <img class="brand-logo logo-light" src="img/logo.png?v=202610312112" alt="wirken" width="351" height="67">
+      <img class="brand-logo logo-dark" src="img/logo-dark.png?v=202610312112" alt="wirken" width="351" height="67">
       <h1 class="sr-only">Листогиб — симулятор гибки</h1>
     </a>
     <nav class="tabs">
@@ -34,7 +34,7 @@
     <section class="tab" id="tab-punch" hidden>
       <div class="side-layout">
         <aside class="card side">
-          <h2>Сохранённые пуансоны</h2>
+          <h2>Пуансоны</h2>
           <div id="punchSide" class="side-list"></div>
           <div class="row">
             <button type="button" id="punchNew">+ Копия</button>
@@ -180,7 +180,7 @@
             <button type="button" id="copyBtn" hidden>Копировать</button>
             <button type="button" id="importTextBtn">Загрузить из текста</button>
             <button type="button" id="importBtn">Загрузить из файла</button>
-            <button type="button" class="ghost" id="resetBtn">Сбросить по умолчанию</button>
+            <button type="button" class="ghost" id="resetBtn">Очистить «Мои»</button>
             <input type="file" id="importFile" accept=".json,application/json,text/plain" hidden>
           </div>
           <textarea id="backupText" class="backup" rows="4" placeholder="Сюда вставьте текст резервной копии"></textarea>
@@ -218,12 +218,13 @@
   <div id="toast" class="toast"></div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script src="js/data.js?v=202610312059"></script>
-  <script src="js/geom.js?v=202610312059"></script>
-  <script src="js/calc.js?v=202610312059"></script>
-  <script src="js/svg.js?v=202610312059"></script>
-  <script src="js/sim.js?v=202610312059"></script>
-  <script src="js/view3d.js?v=202610312059"></script>
-  <script src="js/ui.js?v=202610312059"></script>
+  <script src="js/data.js?v=202610312112"></script>
+  <script src="js/catalog.js?v=202610312112"></script>
+  <script src="js/geom.js?v=202610312112"></script>
+  <script src="js/calc.js?v=202610312112"></script>
+  <script src="js/svg.js?v=202610312112"></script>
+  <script src="js/sim.js?v=202610312112"></script>
+  <script src="js/view3d.js?v=202610312112"></script>
+  <script src="js/ui.js?v=202610312112"></script>
 </body>
 </html>

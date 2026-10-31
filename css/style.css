@@ -326,3 +326,10 @@ th, td { border-bottom: 1px solid var(--line); padding: 6px 8px; text-align: lef
 #simSvg { cursor: zoom-in; }
 /* На телефоне шапка высокая — не прилипает, чтобы не закрывать анимацию */
 @media (max-width: 680px) { .top { position: static; } }
+
+/* Каталог и «Мои» */
+.side-h, .pills-h { font: 500 13px var(--f-display); text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-top: 6px; }
+.pills-h { align-self: center; margin: 0 4px 0 2px; }
+.pills-h:not(:first-child) { margin-left: 12px; }
+.cat-note { margin: 0; padding: 8px 10px; border-left: 3px solid var(--accent); background: var(--tool-fill); font-size: 13px; }
+.stepper input:disabled, .stepper button:disabled, input[type=text]:disabled { opacity: .65; cursor: not-allowed; }

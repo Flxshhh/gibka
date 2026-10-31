@@ -17,8 +17,8 @@
   function store(k, v) { try { localStorage.setItem(KEY + k, JSON.stringify(v)); } catch (e) { /* без хранилища тоже работаем */ } }
 
   const ST = {
-    punches: load('punches', LG.DEFAULT_PUNCHES),
-    dies: load('dies', LG.DEFAULT_DIES),
+    punches: load('punches', []),   // «Мои» — личные, в браузере; общий каталог — LG.CATALOG
+    dies: load('dies', []),
     machine: Object.assign(clone(LG.DEFAULT_MACHINE), load('machine', {})),
     parts: load('parts', []),
     part: Object.assign(clone(LG.DEFAULT_PART), load('part', {})),
@@ -26,7 +26,6 @@
   };
   // Пуансоны старого формата (до схемы WIRKEN) заменяем стандартными
   ST.punches = ST.punches.filter(p => p.Hb > 0 && p.W > 0);
-  if (!ST.punches.length) ST.punches = clone(LG.DEFAULT_PUNCHES);
   // Толщину носика заменили длиной носика: переносим текущую форму в новый параметр
   ST.punches.forEach(p => {
     if (!(p.t > 0)) p.t = 8;
@@ -56,6 +55,14 @@
       localStorage.setItem(KEY + 'ui', JSON.stringify(ST.ui));
     } catch (e) { /* без хранилища — просто применится при следующем открытии */ }
   }
+
+  // Каталог (общий, только чтение) + «Мои» (личные)
+  const CAT = LG.CATALOG || { punches: [], dies: [] };
+  const isCat = id => String(id || '').indexOf('cat_') === 0;
+  const allPunches = () => CAT.punches.concat(ST.punches);
+  const allDies = () => CAT.dies.concat(ST.dies);
+  const findPunch = id => allPunches().find(x => x.id === id);
+  const findDie = id => allDies().find(x => x.id === id);
 
   let saveTimer = null;
   function saveAll() {
@@ -89,15 +96,15 @@
   function resolve() {
     const p = ST.part;
     const S = Math.max(0.1, +p.S || 1);
-    const punch = ST.punches.find(x => x.id === p.punchId) || ST.punches[0];
+    const punch = findPunch(p.punchId) || allPunches()[0];
     const opts = C.vOptions(S);
     let die, V;
-    if (p.dieId === 'auto' || !ST.dies.find(d => d.id === p.dieId)) {
+    if (p.dieId === 'auto' || !findDie(p.dieId)) {
       if (p.V && !opts.some(o => o.V === p.V)) p.V = null;
       V = p.V || C.recommendedV(S);
       die = autoDie(V);
     } else {
-      die = ST.dies.find(d => d.id === p.dieId);
+      die = findDie(p.dieId);
       V = die.V;
     }
     const riTable = C.riFor(V, p.material);
@@ -123,8 +130,8 @@
     if (obj === 'part') return ST.part;
     if (obj === 'machine') return ST.machine;
     if (obj === 'ui') return ST.ui;
-    if (obj === 'punch') return ST.punches.find(x => x.id === ST.ui.editPunch);
-    if (obj === 'die') return ST.dies.find(x => x.id === ST.ui.editDie);
+    if (obj === 'punch') return isCat(ST.ui.editPunch) ? null : findPunch(ST.ui.editPunch);   // каталог не меняем
+    if (obj === 'die') return isCat(ST.ui.editDie) ? null : findDie(ST.ui.editDie);
     if (obj.indexOf('seg:') === 0) return ST.part.segs[+obj.slice(4)];
     return null;
   }
@@ -208,8 +215,15 @@
   let view3d = null;
 
   function curPunch() {
-    if (!ST.punches.find(x => x.id === ST.ui.editPunch)) ST.ui.editPunch = (ST.punches[0] || {}).id;
-    return target('punch');
+    if (!findPunch(ST.ui.editPunch)) ST.ui.editPunch = (allPunches()[0] || {}).id;
+    return findPunch(ST.ui.editPunch);
+  }
+
+  // Позиция каталога: поля только для просмотра и подсказка, как сделать свою
+  function lockIfCatalog(sel, locked) {
+    const box = $(sel);
+    box.querySelectorAll('input, .stepper button').forEach(el => { el.disabled = locked; });
+    if (locked) box.insertAdjacentHTML('afterbegin', '<p class="field span2 cat-note">Позиция каталога — общая для всех. Чтобы изменить, нажмите «+ Копия»: копия появится в «Моих».</p>');
   }
 
   function renderPunchTab() {
@@ -221,6 +235,8 @@
         PUNCH_F.filter(f => pu.type !== 'straight' || ['W', 'shelf', 'tL', 'noseL'].indexOf(f[0]) < 0).map(f => stepper('punch', f[0], pu[f[0]], f[2], f[3], f[4], f[1])).join('')
       : '<p class="muted">Нет пуансонов</p>';
     $$('[data-pview]').forEach(b => b.classList.toggle('on', b.dataset.pview === ST.ui.pview));
+    lockIfCatalog('#punchForm', isCat(ST.ui.editPunch));
+    $('#punchDel').hidden = isCat(ST.ui.editPunch);
     renderPunchView();
   }
 
@@ -231,9 +247,12 @@
   }
 
   function renderPunchSide() {
-    $('#punchSide').innerHTML = ST.punches.map(x =>
-      '<button type="button" class="side-item' + (x.id === ST.ui.editPunch ? ' on' : '') + '" data-pick-punch="' + x.id + '">' +
-      punchThumb(x) + '<span><b>' + esc(x.name) + '</b><span class="muted small">H' + fmt(x.H, 1) + ' · ' + fmt(x.angle, 1) + '° · R' + fmt(x.r, 2) + ' · ' + fmt(x.W, 1) + ' мм</span></span></button>').join('');
+    const item = x => '<button type="button" class="side-item' + (x.id === ST.ui.editPunch ? ' on' : '') + '" data-pick-punch="' + x.id + '">' +
+      punchThumb(x) + '<span><b>' + esc(x.name) + '</b><span class="muted small">H' + fmt(x.H, 1) + ' · ' + fmt(x.angle, 1) + '° · R' + fmt(x.r, 2) + ' · ' + fmt(x.W, 1) + ' мм</span></span></button>';
+    $('#punchSide').innerHTML =
+      '<div class="side-h">Каталог</div>' + CAT.punches.map(item).join('') +
+      '<div class="side-h">Мои пуансоны</div>' +
+      (ST.punches.length ? ST.punches.map(item).join('') : '<p class="muted small">Пусто. Выберите позицию каталога и нажмите «+ Копия», чтобы сделать свою.</p>');
   }
 
   function punchMass(pu, ps) {
@@ -297,11 +316,11 @@
       if (pv) { ST.ui.pview = pv.dataset.pview; saveAll(); renderPunchTab(); return; }
       const t = e.target;
       if (t.id === 'punchNew') {
-        const src = curPunch() || LG.DEFAULT_PUNCHES[0];
-        const n = Object.assign(clone(src), { id: uid('p_'), name: src.name + ' (копия)' });
+        const src = curPunch() || CAT.punches[0];
+        const n = Object.assign(clone(src), { id: uid('p_'), name: src.name + (isCat(src.id) ? ' (моя)' : ' (копия)') });
         ST.punches.push(n); ST.ui.editPunch = n.id;
       } else if (t.id === 'punchDel') {
-        if (ST.punches.length <= 1) { toast('Последний пуансон удалить нельзя'); return; }
+        if (isCat(ST.ui.editPunch)) { toast('Позиции каталога удалить нельзя'); return; }
         if (!armed(t, 'Точно удалить?')) return;
         ST.punches = ST.punches.filter(x => x.id !== ST.ui.editPunch);
       } else return;
@@ -599,6 +618,9 @@
   // СИМУЛЯЦИЯ
   // =====================================================================
   let R = null;
+  const optGroups = (groups, sel) => groups.filter(g => g[1].length).map(g => '<optgroup label="' + g[0] + '">' +
+    g[1].map(x => '<option value="' + x.id + '"' + (x.id === sel ? ' selected' : '') + '>' + esc(x.name) + '</option>').join('') + '</optgroup>').join('');
+
   function renderSimTab() {
     const p = ST.part, r = resolve();
     const vSel = r.auto
@@ -609,12 +631,12 @@
       : '';
     $('#toolForm').innerHTML =
       '<div class="field"><label>Пуансон</label><select id="punchSel">' +
-      ST.punches.map(x => '<option value="' + x.id + '"' + (x.id === (r.punch && r.punch.id) ? ' selected' : '') + '>' + esc(x.name) + '</option>').join('') + '</select></div>' +
+      optGroups([['Каталог', CAT.punches], ['Мои', ST.punches]], r.punch && r.punch.id) + '</select></div>' +
       '<div class="field"><label>Выемка пуансона (гусак)</label><select id="mirSel">' +
       '<option value="0"' + (!p.punchMirror ? ' selected' : '') + '>к оператору</option>' +
       '<option value="1"' + (p.punchMirror ? ' selected' : '') + '>к упору</option></select></div>' +
       '<div class="field"><label>Матрица</label><select id="dieSel"><option value="auto">Авто по таблице</option>' +
-      ST.dies.map(x => '<option value="' + x.id + '"' + (x.id === p.dieId ? ' selected' : '') + '>' + esc(x.name) + '</option>').join('') + '</select></div>' +
+      optGroups([['Каталог', CAT.dies], ['Мои', ST.dies]], p.dieId) + '</select></div>' +
       vSel +
       stepper('part', 'riOverride', p.riOverride || 0, 0.1, 0, 2, 'Ri вручную, мм (0 — авто)') +
       stepper('part', 'kOverride', p.kOverride || 0, 0.01, 0, 2, 'K-фактор вручную (0 — авто)');
@@ -793,7 +815,7 @@
   // Если с текущим инструментом гнуть не получается — пробуем выемку с другой стороны и другие пуансоны
   function findAlternatives(r) {
     const out = [];
-    ST.punches.forEach(pu => [false, true].forEach(m => {
+    allPunches().forEach(pu => [false, true].forEach(m => {
       if (pu.id === r.punch.id && m === !!ST.part.punchMirror) return;
       const sim = new LG.Sim({ an: r.an, S: r.S, Ri: r.Ri, K: r.K, punch: pu, punchMirror: m, die: r.die, machine: ST.machine });
       if (sim.plan(null, 1500).ok) out.push({ id: pu.id, name: pu.name, mirror: m });
@@ -916,18 +938,22 @@
     ['maxTon', 'Макс. усилие пресса, т', 5, 1, 0]];
 
   function renderDiesTab() {
-    if (!ST.dies.find(x => x.id === ST.ui.editDie)) ST.ui.editDie = (ST.dies[0] || {}).id;
-    const di = target('die');
-    $('#dieList').innerHTML = ST.dies.map(x => '<button type="button" class="pill' + (x.id === ST.ui.editDie ? ' on' : '') + '" data-pick-die="' + x.id + '">' + esc(x.name) + '</button>').join('');
+    if (!findDie(ST.ui.editDie)) ST.ui.editDie = (allDies()[0] || {}).id;
+    const di = findDie(ST.ui.editDie);
+    const pill = x => '<button type="button" class="pill' + (x.id === ST.ui.editDie ? ' on' : '') + '" data-pick-die="' + x.id + '">' + esc(x.name) + '</button>';
+    $('#dieList').innerHTML = '<span class="pills-h">Каталог</span>' + CAT.dies.map(pill).join('') +
+      '<span class="pills-h">Мои</span>' + (ST.dies.length ? ST.dies.map(pill).join('') : '<span class="muted small">пусто — «+ Копия» из каталога</span>');
     $('#dieForm').innerHTML = di ? '<div class="field span2"><label>Название</label><input type="text" id="dieName" value="' + esc(di.name) + '"></div>' +
       DIE_F.map(f => stepper('die', f[0], di[f[0]], f[2], f[3], f[4], f[1])).join('') : '<p class="muted">Нет матриц</p>';
+    lockIfCatalog('#dieForm', isCat(ST.ui.editDie));
+    $('#dieDel').hidden = isCat(ST.ui.editDie);
     $('#machForm').innerHTML = MACH_F.map(f => stepper('machine', f[0], ST.machine[f[0]], f[2], f[3], f[4], f[1])).join('');
     renderDieView();
   }
 
   function renderDieView() {
     if (ST.ui.tab !== 'dies') return;
-    const di = target('die');
+    const di = findDie(ST.ui.editDie);
     if (!di) return;
     const ds = G.dieShape(di, 0);
     const fs = Math.max(ds.W, di.H) / 14;
@@ -950,12 +976,12 @@
       if (t.dataset.pickDie) { ST.ui.editDie = t.dataset.pickDie; saveAll(); renderDiesTab(); return; }
       switch (t.id) {
         case 'dieNew': {
-          const src = target('die') || LG.DEFAULT_DIES[0];
-          const n = Object.assign(clone(src), { id: uid('d_'), name: src.name + ' (копия)' });
+          const src = findDie(ST.ui.editDie) || CAT.dies[0];
+          const n = Object.assign(clone(src), { id: uid('d_'), name: src.name + (isCat(src.id) ? ' (моя)' : ' (копия)') });
           ST.dies.push(n); ST.ui.editDie = n.id; break;
         }
         case 'dieDel':
-          if (ST.dies.length <= 1) { toast('Последнюю матрицу удалить нельзя'); return; }
+          if (isCat(ST.ui.editDie)) { toast('Позиции каталога удалить нельзя'); return; }
           if (!armed(t, 'Точно удалить?')) return;
           ST.dies = ST.dies.filter(x => x.id !== ST.ui.editDie);
           break;
@@ -965,7 +991,7 @@
         case 'importBtn': $('#importFile').click(); return;
         case 'resetBtn':
           if (!armed(t, 'Нажмите ещё раз — ваш инструмент удалится')) return;
-          ST.punches = clone(LG.DEFAULT_PUNCHES); ST.dies = clone(LG.DEFAULT_DIES); ST.machine = clone(LG.DEFAULT_MACHINE);
+          ST.punches = []; ST.dies = []; ST.machine = clone(LG.DEFAULT_MACHINE);   // каталог остаётся
           toast('Инструмент и станок сброшены');
           break;
         default: return;
@@ -1002,8 +1028,8 @@
   function importText(txt) {
     try {
       const d = JSON.parse(txt);
-      if (Array.isArray(d.punches) && d.punches.length) ST.punches = d.punches;
-      if (Array.isArray(d.dies) && d.dies.length) ST.dies = d.dies;
+      if (Array.isArray(d.punches)) ST.punches = d.punches.filter(x => !isCat(x.id));
+      if (Array.isArray(d.dies)) ST.dies = d.dies.filter(x => !isCat(x.id));
       if (d.machine) ST.machine = Object.assign(clone(LG.DEFAULT_MACHINE), d.machine);
       if (Array.isArray(d.parts)) ST.parts = d.parts;
       saveAll(); renderDiesTab(); toast('Загружено');
