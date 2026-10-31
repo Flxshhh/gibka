@@ -181,7 +181,21 @@
     };
   };
 
+  // Пуансон из каталога: готовый контур (мм), кромка в (0,0), хвостовик правее оси
+  G.customShape = function (pp) {
+    const pts = dedupe(pp.outline.map(p => ({ x: p[0], y: p[1] })));
+    const b = G.bounds(pts);
+    const Hb = pp.Hb, A = pp.H;
+    return {
+      custom: true, poly: pts, tang: [], outline: pts,
+      H: Hb, Htot: A, tangH: A - Hb, tangCx: pp.tangCx != null ? pp.tangCx : 12.5,
+      goose: false, x0: b.x0, x1: b.x1, width: b.x1 - b.x0, xNL: b.x0, xR: b.x1, T: 0, t: 0, tL: 0, tR: 0,
+      noseL: 0, ht: 0, htL: 0, htR: 0, yNbL: 0, yNbR: 0, yNT: Hb, yRT: Hb
+    };
+  };
+
   G.punchShape = function (pp) {
+    if (pp.type === 'custom' && pp.outline) return G.customShape(pp);
     const goose = pp.type !== 'straight';
     if (!goose) return G.straightShape(pp);
     const { XL, TL } = G.PUNCH_FIX;

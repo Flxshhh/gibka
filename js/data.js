@@ -75,7 +75,7 @@ LG.DEFAULT_MACHINE = {
 LG.DEFAULT_PART = {
   name: 'Новая деталь',
   S: 1.2, material: 'Fe', L: 1000, dimMode: 'outer',
-  punchId: 'cat_goose85', dieId: 'auto', V: null, riOverride: null, kOverride: null,
+  punchId: 'cat_top_205_85_r08', dieId: 'auto', V: null, riOverride: null, kOverride: null,
   segs: [],
   order: null
 };

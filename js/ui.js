@@ -231,8 +231,11 @@
     renderPunchSide();
     $('#punchForm').innerHTML = pu
       ? '<div class="field span2"><label>Название</label><input type="text" id="punchName" value="' + esc(pu.name) + '"></div>' +
-        '<div class="field span2 muted small">Тип: <b>' + (pu.type === 'straight' ? 'прямой' : 'гусак') + '</b></div>' +
-        PUNCH_F.filter(f => pu.type !== 'straight' || ['W', 'shelf', 'tL', 'noseL'].indexOf(f[0]) < 0).map(f => stepper('punch', f[0], pu[f[0]], f[2], f[3], f[4], f[1])).join('')
+        '<div class="field span2 muted small">Тип: <b>' + (pu.type === 'custom' ? 'по каталогу' + (pu.group ? ' · ' + esc(pu.group) : '') : pu.type === 'straight' ? 'прямой' : 'гусак') + '</b></div>' +
+        (pu.type === 'custom'
+          ? '<p class="field span2 muted small">Контур по чертежу каталога' + (pu.note ? ' (' + esc(pu.note) + ')' : '') + '. A = ' + fmt(pu.H, 1) + ' мм, H = A − 30 = ' + fmt(pu.Hb, 1) + ' мм, угол ' + fmt(pu.angle, 1) + '°.</p>' +
+            PUNCH_F.filter(f => ['L', 'r'].indexOf(f[0]) >= 0).map(f => stepper('punch', f[0], pu[f[0]], f[2], f[3], f[4], f[1])).join('')
+          : PUNCH_F.filter(f => pu.type !== 'straight' || ['W', 'shelf', 'tL', 'noseL'].indexOf(f[0]) < 0).map(f => stepper('punch', f[0], pu[f[0]], f[2], f[3], f[4], f[1])).join(''))
       : '<p class="muted">Нет пуансонов</p>';
     $$('[data-pview]').forEach(b => b.classList.toggle('on', b.dataset.pview === ST.ui.pview));
     lockIfCatalog('#punchForm', isCat(ST.ui.editPunch));
@@ -246,11 +249,18 @@
     return '<svg class="thumb" viewBox="' + SV.viewBox(G.bounds(ps.outline), 4) + '">' + SV.path(ps.outline, 'm-punch') + '</svg>';
   }
 
+  // Группы каталога в порядке появления
+  function catGroups(list) {
+    const order = [], map = {};
+    list.forEach(x => { const g = x.group || 'Каталог'; if (!map[g]) { map[g] = []; order.push(g); } map[g].push(x); });
+    return order.map(g => [g, map[g]]);
+  }
+
   function renderPunchSide() {
     const item = x => '<button type="button" class="side-item' + (x.id === ST.ui.editPunch ? ' on' : '') + '" data-pick-punch="' + x.id + '">' +
-      punchThumb(x) + '<span><b>' + esc(x.name) + '</b><span class="muted small">H' + fmt(x.H, 1) + ' · ' + fmt(x.angle, 1) + '° · R' + fmt(x.r, 2) + ' · ' + fmt(x.W, 1) + ' мм</span></span></button>';
+      punchThumb(x) + '<span><b>' + esc(x.name) + '</b><span class="muted small">A' + fmt(x.H, 1) + ' · H' + fmt(x.Hb, 1) + ' · ' + fmt(x.angle, 1) + '° · R' + fmt(x.r, 2) + '</span></span></button>';
     $('#punchSide').innerHTML =
-      '<div class="side-h">Каталог</div>' + CAT.punches.map(item).join('') +
+      catGroups(CAT.punches).map(g => '<div class="side-h">Каталог · ' + esc(g[0]) + '</div>' + g[1].map(item).join('')).join('') +
       '<div class="side-h">Мои пуансоны</div>' +
       (ST.punches.length ? ST.punches.map(item).join('') : '<p class="muted small">Пусто. Выберите позицию каталога и нажмите «+ Копия», чтобы сделать свою.</p>');
   }
@@ -275,6 +285,7 @@
       view3d.setShape([ps.outline], pu.L);
       return;
     }
+    if (ps.custom) { drawCustomPunch(pu, ps); return; }
     // Чертёж с размерами: слева фиксировано 7 + 6 + 13, справа — регулируемые
     const fx = G.PUNCH_FIX, top = ps.Htot, fs = ps.Htot / 18;
     let h = SV.path(ps.outline, 'm-punch');
@@ -303,6 +314,24 @@
     if (ps.xNL > 0) h += SV.text({ x: ps.xNL / 2, y: ps.yNT + fs * 0.2 }, 'выемка ' + fmt(ps.xNL, 1), fs * 0.55, 'lbl-s');
     const b = G.bounds(ps.outline);
     b.x0 -= fs * 5; b.x1 += fs * 6; b.y0 -= fs * 4.6; b.y1 += fs * 6.2;
+    $('#punchSvg').setAttribute('viewBox', SV.viewBox(b, 0));
+    $('#punchSvg').innerHTML = h;
+  }
+
+  // Чертёж пуансона из каталога: контур, ось, A, H = A − 30, ширина, угол и радиус кромки
+  function drawCustomPunch(pu, ps) {
+    const top = ps.Htot, fs = top / 18;
+    let h = SV.path(ps.outline, 'm-punch');
+    h += SV.line({ x: 0, y: -fs * 1.5 }, { x: 0, y: top + fs }, 'axis');
+    h += SV.text({ x: -fs * 0.5, y: top + fs * 1.6 }, 'ось', fs * 0.6, 'lbl-s');
+    h += SV.dim({ x: ps.x0, y: top }, { x: ps.x1, y: top }, fs * 2.6, fmt(ps.width, 1), fs * 0.9);
+    h += SV.dim({ x: ps.x1, y: 0 }, { x: ps.x1, y: top }, -(fs * 4.6), 'A ' + fmt(pu.H, 1), fs);
+    h += SV.dim({ x: ps.x1, y: 0 }, { x: ps.x1, y: ps.H }, -(fs * 2), 'H ' + fmt(pu.Hb, 1), fs * 0.85);
+    h += SV.text({ x: fs * 2.8, y: fs * 1.4 }, fmt(pu.angle, 1) + '°', fs * 0.9, 'lbl');
+    h += SV.line({ x: 0, y: 0 }, { x: -fs * 3, y: -fs * 1.4 }, 'dim-l');
+    h += SV.text({ x: -fs * 4.2, y: -fs * 1.6 }, 'R' + fmt(pu.r, 2), fs * 0.8, 'lbl');
+    const b = G.bounds(ps.outline);
+    b.x0 -= fs * 5; b.x1 += fs * 6; b.y0 -= fs * 3; b.y1 += fs * 4.5;
     $('#punchSvg').setAttribute('viewBox', SV.viewBox(b, 0));
     $('#punchSvg').innerHTML = h;
   }
@@ -631,7 +660,7 @@
       : '';
     $('#toolForm').innerHTML =
       '<div class="field"><label>Пуансон</label><select id="punchSel">' +
-      optGroups([['Каталог', CAT.punches], ['Мои', ST.punches]], r.punch && r.punch.id) + '</select></div>' +
+      optGroups(catGroups(CAT.punches).map(g => ['Каталог · ' + g[0], g[1]]).concat([['Мои', ST.punches]]), r.punch && r.punch.id) + '</select></div>' +
       '<div class="field"><label>Выемка пуансона (гусак)</label><select id="mirSel">' +
       '<option value="0"' + (!p.punchMirror ? ' selected' : '') + '>к оператору</option>' +
       '<option value="1"' + (p.punchMirror ? ' selected' : '') + '>к упору</option></select></div>' +
@@ -818,7 +847,7 @@
     allPunches().forEach(pu => [false, true].forEach(m => {
       if (pu.id === r.punch.id && m === !!ST.part.punchMirror) return;
       const sim = new LG.Sim({ an: r.an, S: r.S, Ri: r.Ri, K: r.K, punch: pu, punchMirror: m, die: r.die, machine: ST.machine });
-      if (sim.plan(null, 1500).ok) out.push({ id: pu.id, name: pu.name, mirror: m });
+      if (sim.plan(null, 600).ok) out.push({ id: pu.id, name: pu.name, mirror: m });
     }));
     return out;
   }
