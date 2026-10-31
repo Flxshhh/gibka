@@ -1,0 +1,81 @@
+name: Android APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Положить сайт внутрь приложения
+        run: |
+          A=android/app/src/main/assets/www
+          mkdir -p "$A"
+          cp -r index.html css js img "$A"/
+          # three.js — локально, чтобы 3D работало без интернета
+          curl -sSfL -o "$A/js/three.min.js" https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js
+          sed -i 's#https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js#js/three.min.js#' "$A/index.html"
+          # метки версий ?v=... для файлов внутри APK не нужны
+          sed -i -E 's/\?v=[0-9]+//g' "$A/index.html"
+          grep -n "<script" "$A/index.html"
+
+      - name: Ключ подписи
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          K="$RUNNER_TEMP/release.keystore"
+          if [ -n "$KEYSTORE_BASE64" ] && [ -n "$KEYSTORE_PASSWORD" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$K"
+            echo "KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+            echo "Постоянный ключ из секретов"
+          else
+            # Секретов нет — временный ключ: APK рабочий, но обновления поверх не встанут
+            P="tmp-$(openssl rand -hex 12)"
+            keytool -genkeypair -keystore "$K" -alias listogib -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass "$P" -keypass "$P" -dname "CN=Listogib"
+            echo "::add-mask::$P"
+            echo "KEYSTORE_PASSWORD=$P" >> "$GITHUB_ENV"
+            echo "::warning::Нет секретов ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD — подписано временным ключом"
+          fi
+          echo "KEYSTORE_FILE=$K" >> "$GITHUB_ENV"
+
+      - name: Собрать APK
+        working-directory: android
+        run: gradle --no-daemon --stacktrace assembleRelease
+
+      - name: Переименовать
+        run: cp android/app/build/outputs/apk/release/app-release.apk listogib.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: listogib-apk
+          path: listogib.apk
+
+      - name: Выложить в Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-${{ github.run_number }}
+          name: Листогиб для Android (сборка ${{ github.run_number }})
+          body: |
+            Скачать на телефон: listogib.apk ниже.
+            Постоянная ссылка на последнюю версию:
+            https://github.com/${{ github.repository }}/releases/latest/download/listogib.apk
+          files: listogib.apk
+          make_latest: true
