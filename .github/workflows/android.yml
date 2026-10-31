@@ -1,8 +1,7 @@
 name: Android APK
 
+# Сборка APK отложена до готовности сайта — только ручной запуск (Actions → Android APK → Run workflow)
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
