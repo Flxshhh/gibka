@@ -131,6 +131,12 @@
                 <option value="close" selected>Крупно</option><option value="all">Весь станок</option>
               </select>
             </div>
+            <div class="mag">
+              <label for="simMag">Приближение к гибу</label>
+              <input type="range" id="simMag" min="1" max="12" step="0.1" value="1">
+              <span id="simMagV" class="mag-v">1×</span>
+              <span class="muted small mag-hint">колесо мыши над картинкой, двойной клик — сброс</span>
+            </div>
             <p class="muted small legend"><span class="sw sw-a"></span> сторона листа, обращённая вверх (к пуансону) · <span class="sw sw-hit"></span> столкновение · слева — оператор, справа — задний упор</p>
           </div>
           <div class="card">

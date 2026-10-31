@@ -731,6 +731,20 @@
     });
     $('#simSlider').addEventListener('input', e => { PLAYER.pause(); PLAYER.seek(e.target.value / 1000 * PLAYER.total()); });
     $('#simSpeed').addEventListener('change', e => { PLAYER.speed = +e.target.value; });
+    // Ползунок и колесо мыши: приближение к месту гиба
+    const setMag = m => {
+      PLAYER.mag = Math.max(1, Math.min(12, Math.round(m * 10) / 10));
+      $('#simMag').value = PLAYER.mag;
+      $('#simMagV').textContent = fmt(PLAYER.mag, 1) + '×';
+      drawFrame();
+    };
+    $('#simMag').addEventListener('input', e => setMag(+e.target.value));
+    $('#simSvg').addEventListener('wheel', e => {
+      if (!PLAYER.plan) return;
+      e.preventDefault();
+      setMag(PLAYER.mag * (e.deltaY < 0 ? 1.15 : 1 / 1.15));
+    }, { passive: false });
+    $('#simSvg').addEventListener('dblclick', () => setMag(1));
     $('#simZoom').addEventListener('change', e => {
       PLAYER.zoom = e.target.value;
       if (PLAYER.sim && PLAYER.plan) PLAYER.view = computeView(PLAYER.sim, PLAYER.plan);
@@ -740,7 +754,7 @@
 
   // ---------- Плеер ----------
   const PLAYER = {
-    sim: null, plan: null, t: 0, dur: 4, playing: false, speed: 1, last: 0, view: null, zoom: 'close',
+    sim: null, plan: null, t: 0, dur: 4, playing: false, speed: 1, last: 0, view: null, zoom: 'close', mag: 1,
     total() { return this.plan ? this.plan.steps.length * this.dur : 0; },
     seek(t) { this.t = Math.max(0, Math.min(this.total(), t)); drawFrame(); },
     play() {
@@ -860,7 +874,14 @@
     const t = sim.tools(tip);
     const hitTools = hits.map(h => h.tool);
     const cls = name => hitTools.indexOf(name) >= 0 ? ' hit' : '';
-    const v = PLAYER.view;
+    // Приближение к месту гиба (кромка пуансона над матрицей)
+    const v0 = PLAYER.view, mag = Math.max(1, PLAYER.mag || 1);
+    let v = v0;
+    if (mag > 1) {
+      const cx = 0, cy = sim.dieTop + ST.part.S;
+      const w = (v0.x1 - v0.x0) / mag, hh = (v0.y1 - v0.y0) / mag;
+      v = { x0: cx - w / 2, x1: cx + w / 2, y0: cy - hh / 2, y1: cy + hh / 2 };
+    }
     const fs = (v.y1 - v.y0) / 32;
 
     let h = SV.path(sim.table, 'm-table' + cls('стол')) + SV.path(sim.pad, 'm-pad' + cls('подложка')) +
@@ -874,7 +895,7 @@
       SV.path(t.tang, 'm-tang') + SV.path(t.punch, 'm-punch' + cls('пуансон')) +
       SV.path(sheet, 'sheet' + (hits.length ? ' hit' : '')) + SV.path(face, 'faceUp', false);
     hits.forEach(x => x.hits.forEach(p => { h += SV.circle(p, fs * 0.35, 'hitpt'); }));
-    svg.setAttribute('viewBox', SV.viewBox(v, 4));
+    svg.setAttribute('viewBox', SV.viewBox(v, 4 / mag));
     svg.innerHTML = h;
 
     const b = R.an.bends[s.bend];
