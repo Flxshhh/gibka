@@ -296,9 +296,11 @@ th, td { border-bottom: 1px solid var(--line); padding: 6px 8px; text-align: lef
 /* Логотип компании в шапке */
 .brand-logo { display: block; height: 44px; width: auto; }
 @media (max-width: 680px) { .brand-logo { height: 34px; } }
-/* в тёмной теме логотип на светлой подложке, чтобы тёмные квадраты не терялись */
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .brand-logo { background: #fff; border-radius: 4px; padding: 4px 8px; } }
-:root[data-theme="dark"] .brand-logo { background: #fff; border-radius: 4px; padding: 4px 8px; }
+/* светлая и тёмная версии логотипа: в тёмной теме — на тёмном фоне, линии и квадраты светлые */
+.logo-dark { display: none; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .logo-light { display: none; } :root:not([data-theme="light"]) .logo-dark { display: block; } }
+:root[data-theme="dark"] .logo-light { display: none; }
+:root[data-theme="dark"] .logo-dark { display: block; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 @media (max-width: 1450px) {
   .brand-logo { height: 40px; }
