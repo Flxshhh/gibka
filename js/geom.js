@@ -150,7 +150,8 @@
   // расширяется обратно к левому краю и сходится к кромке. Кромка симметрична: грани по ±угол/2.
   G.straightShape = function (pp) {
     const { XL, TL, TW, TH } = G.PUNCH_FIX;
-    const xF = XL, xT = TL + TW;                               // левый край (−6) и плоская сторона (20)
+    const xT = TL + TW;                                        // плоская сторона (20)
+    const xF = xT - Math.max(xT - XL, pp.W || 26);             // левый край: обычно −6 (толщина 26), шире — уходит влево
     const a = G.deg(Math.max(10, Math.min(170, pp.angle))) / 2;
     const r = Math.max(0, pp.r);
     const Hb = Math.max(40, pp.Hb);
