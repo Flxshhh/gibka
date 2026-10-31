@@ -745,6 +745,7 @@
       setMag(PLAYER.mag * (e.deltaY < 0 ? 1.15 : 1 / 1.15));
     }, { passive: false });
     $('#simSvg').addEventListener('dblclick', () => setMag(1));
+    $$('.mag-btn').forEach(bt => bt.addEventListener('click', () => setMag(PLAYER.mag * +bt.dataset.mag)));
     $('#simZoom').addEventListener('change', e => {
       PLAYER.zoom = e.target.value;
       if (PLAYER.sim && PLAYER.plan) PLAYER.view = computeView(PLAYER.sim, PLAYER.plan);
