@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Листогиб</title>
+  <meta name="description" content="Симулятор гибки листа на листогибочном прессе: пуансоны, матрицы, таблица усилий, развёртка и порядок гибов.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Oswald:wght@500;600&family=PT+Sans:wght@400;700&display=swap">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <svg viewBox="0 0 40 40" aria-hidden="true"><rect class="bar2" x="3" y="27" width="10" height="10"/><path class="bar" d="M15 37 V20 L26 9 H37 V15 H28.5 L21 22.5 V37 Z"/></svg>
+      <h1>Листогиб</h1>
+    </div>
+    <nav class="tabs">
+      <button type="button" data-tab="punch">Пуансоны</button>
+      <button type="button" data-tab="part">Конструктор детали</button>
+      <button type="button" data-tab="sim">Симуляция</button>
+      <button type="button" data-tab="dies">Матрицы и станок</button>
+      <button type="button" data-tab="table">Таблица усилий</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- ПУАНСОНЫ -->
+    <section class="tab" id="tab-punch" hidden>
+      <div class="side-layout">
+        <aside class="card side">
+          <h2>Сохранённые пуансоны</h2>
+          <div id="punchSide" class="side-list"></div>
+          <div class="row">
+            <button type="button" id="punchNew">+ Копия</button>
+            <button type="button" class="ghost" id="punchDel">Удалить</button>
+          </div>
+        </aside>
+        <div class="card">
+          <div class="row between">
+            <div class="seg-tabs" role="tablist">
+              <button type="button" data-pview="draw">Чертёж</button>
+              <button type="button" data-pview="3d">3D-модель</button>
+            </div>
+            <div class="muted small" id="punchMass"></div>
+          </div>
+          <div class="editor">
+            <div class="form" id="punchForm"></div>
+            <div>
+              <svg id="punchSvg" class="view tool" preserveAspectRatio="xMidYMid meet"></svg>
+              <div id="punch3d" class="view tool view3d" hidden></div>
+              <p class="muted small" id="punch3dHint" hidden>Крутить — тянуть мышью или пальцем, приближать — колесом или двумя пальцами.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- КОНСТРУКТОР ДЕТАЛИ -->
+    <section class="tab" id="tab-part" hidden>
+      <div class="side-layout">
+        <aside class="side-stack">
+          <div class="card">
+            <h2>Лист</h2>
+            <div id="sheetForm" class="form"></div>
+          </div>
+          <div class="card">
+            <h2>Добавить отрезок</h2>
+            <div id="addForm" class="form"></div>
+          </div>
+        </aside>
+        <div class="side-stack">
+          <div class="card">
+            <div class="row between">
+              <h2>Деталь</h2>
+              <div class="row">
+                <button type="button" id="segUndo">↶ Отменить</button>
+                <button type="button" class="ghost" id="segClear">Очистить</button>
+                <button type="button" class="primary" id="goBend">▶ Гнуть</button>
+              </div>
+            </div>
+            <p class="muted small">Нажмите на точку детали (начало, изгиб или конец), чтобы достраивать от неё. Направление любого отрезка можно поменять в списке.</p>
+            <svg id="profileSvg" class="view" preserveAspectRatio="xMidYMid meet"></svg>
+            <div id="curInfo" class="cur-info"></div>
+            <div id="segList" class="seg-list"></div>
+          </div>
+          <div class="card">
+            <h2>Развёртка</h2>
+            <div id="partCalc"></div>
+          </div>
+          <div class="card">
+            <h2>Сохранённые детали</h2>
+            <div id="partsForm" class="form"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- СИМУЛЯЦИЯ -->
+    <section class="tab" id="tab-sim" hidden>
+      <div class="side-layout">
+        <aside class="side-stack">
+          <div class="card">
+            <h2>Инструмент</h2>
+            <div id="toolForm" class="form"></div>
+          </div>
+          <div class="card">
+            <h2>Расчёт</h2>
+            <div id="calcOut"></div>
+          </div>
+        </aside>
+        <div class="side-stack">
+          <div class="card" id="simCard">
+            <h2>Симуляция гибки</h2>
+            <div id="simHud" class="hud"></div>
+            <svg id="simSvg" class="view sim" preserveAspectRatio="xMidYMid meet"></svg>
+            <div class="player">
+              <button type="button" id="simPrev" title="Предыдущий шаг">⏮</button>
+              <button type="button" id="simPlay" class="primary">▶ Гнуть</button>
+              <button type="button" id="simNext" title="Следующий шаг">⏭</button>
+              <input type="range" id="simSlider" min="0" max="1000" value="0" aria-label="Позиция">
+              <select id="simSpeed" aria-label="Скорость">
+                <option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option>
+              </select>
+              <select id="simZoom" aria-label="Масштаб">
+                <option value="close" selected>Крупно</option><option value="all">Весь станок</option>
+              </select>
+            </div>
+            <p class="muted small legend"><span class="sw sw-a"></span> сторона листа, обращённая вверх (к пуансону) · <span class="sw sw-hit"></span> столкновение · слева — оператор, справа — задний упор</p>
+          </div>
+          <div class="card">
+            <h2>Последовательность гибов</h2>
+            <div id="bendOut"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- МАТРИЦЫ И СТАНОК -->
+    <section class="tab" id="tab-dies" hidden>
+      <div class="grid">
+        <div class="card wide">
+          <div class="row between"><h2>Матрицы</h2>
+            <div class="row"><button type="button" id="dieNew">+ Копия</button><button type="button" class="ghost" id="dieDel">Удалить</button></div></div>
+          <div id="dieList" class="pills"></div>
+          <div class="editor">
+            <div id="dieForm" class="form"></div>
+            <svg id="dieSvg" class="view tool" preserveAspectRatio="xMidYMid meet"></svg>
+          </div>
+        </div>
+        <div class="card wide">
+          <h2>Станок</h2>
+          <div class="editor">
+            <div id="machForm" class="form"></div>
+            <div class="muted small">
+              <p>Стол → подложка → матрица. Сверху: гибочная балка → система крепления пуансона → пуансон.</p>
+              <p>Открытая высота — от стола до низа балки при поднятом прессе.</p>
+            </div>
+          </div>
+        </div>
+        <div class="card wide">
+          <h2>Резервная копия</h2>
+          <p class="muted small">Всё хранится в этом браузере. Чтобы перенести на другой компьютер или телефон: «Показать копию» → скопировать текст → на другом устройстве вставить его в поле и нажать «Загрузить из текста».</p>
+          <div class="row">
+            <button type="button" id="exportBtn">Показать копию</button>
+            <button type="button" id="copyBtn" hidden>Копировать</button>
+            <button type="button" id="importTextBtn">Загрузить из текста</button>
+            <button type="button" id="importBtn">Загрузить из файла</button>
+            <button type="button" class="ghost" id="resetBtn">Сбросить по умолчанию</button>
+            <input type="file" id="importFile" accept=".json,application/json,text/plain" hidden>
+          </div>
+          <textarea id="backupText" class="backup" rows="4" placeholder="Сюда вставьте текст резервной копии"></textarea>
+        </div>
+      </div>
+    </section>
+
+    <!-- ТАБЛИЦА -->
+    <section class="tab" id="tab-table" hidden>
+      <div class="card wide">
+        <h2>Таблица расчёта усилия (сталь, 420 Н/мм²), F в кН/м</h2>
+        <p class="muted small">Подсвечена строка текущей толщины и выбранное V. Рамкой отмечено «среднее» раскрытие, которое берётся по умолчанию.</p>
+        <div id="tableOut"></div>
+        <div class="coef">
+          <table class="mini"><thead><tr><th>Угол</th><th>Мин. полка</th></tr></thead><tbody>
+            <tr><td>30°</td><td>B × 1.6</td></tr><tr><td>60°</td><td>B × 1.1</td></tr><tr><td>90°</td><td>B × 1.0</td></tr><tr><td>120°</td><td>B × 0.9</td></tr><tr><td>150°</td><td>B × 0.7</td></tr>
+          </tbody></table>
+          <table class="mini"><thead><tr><th>Материал</th><th>Усилие</th><th>Радиус</th></tr></thead><tbody>
+            <tr><td>AL, R=200</td><td>× 0.5</td><td>r × 0.8</td></tr><tr><td>Fe, R=420</td><td>× 1.0</td><td>r × 1.0</td></tr><tr><td>INOX, R=700</td><td>× 1.7</td><td>r × 1.4</td></tr>
+          </tbody></table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot"><b>ЛИСТОГИБ</b> · расчёт развёртки и симуляция гибки на листогибочном прессе</footer>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/geom.js"></script>
+  <script src="js/calc.js"></script>
+  <script src="js/svg.js"></script>
+  <script src="js/sim.js"></script>
+  <script src="js/view3d.js"></script>
+  <script src="js/ui.js"></script>
+</body>
+</html>
