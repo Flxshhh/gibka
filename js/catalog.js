@@ -14,24 +14,24 @@
 LG.CATALOG = {
   punches: [
     // --- Гусаки TOP ---
-    { id: 'cat_top_205_85_r08', name: 'TOP.205-85-R08', group: 'Гусаки TOP', type: 'goose', H: 205, Hb: 175, angle: 85, r: 0.8, W: 79, shelf: 53, T: 33, t: 9.5, tL: 4.75, noseL: 87, L: 835 },
-    { id: 'cat_top_205_85_r2', name: 'TOP.205-85-R2', group: 'Гусаки TOP', type: 'goose', H: 205, Hb: 175, angle: 85, r: 2, W: 79, shelf: 53, T: 33, t: 9.5, tL: 4.75, noseL: 87, L: 835 },
-    { id: 'cat_goose85_a175', name: 'Гусак 85° A175 (артикул уточнить)', group: 'Гусаки TOP', type: 'goose', H: 175, Hb: 145, angle: 85, r: 0.8, W: 72.5, shelf: 46.5, T: 27.5, t: 10.7, tL: 5.35, noseL: 89, L: 835 },
-    { id: 'cat_top_175_85_r08_s', name: 'TOP.175-85-R08-S', group: 'Гусаки TOP', type: 'goose', H: 174.5, Hb: 144.5, angle: 85, r: 0.8, W: 66, shelf: 40, T: 28, t: 5.3, tL: 2.65, noseL: 81.5, L: 835 },
-    { id: 'cat_top_175_75_r08', name: 'TOP.175-75-R08', group: 'Гусаки TOP', type: 'goose', H: 175, Hb: 145, angle: 75, r: 0.8, W: 76, shelf: 50, T: 41, t: 12, tL: 6, noseL: 99, L: 835 },
-    { id: 'cat_top_175_75_r2', name: 'TOP.175-75-R2', group: 'Гусаки TOP', type: 'goose', H: 175, Hb: 145, angle: 75, r: 2, W: 76, shelf: 50, T: 41, t: 12, tL: 6, noseL: 99, L: 835 },
+    { id: 'cat_top_205_85_r08', name: 'TOP.205-85-R08', group: 'wirken · Гусаки TOP', type: 'goose', H: 205, Hb: 175, angle: 85, r: 0.8, W: 79, shelf: 53, T: 33, t: 9.5, tL: 4.75, noseL: 87, L: 835 },
+    { id: 'cat_top_205_85_r2', name: 'TOP.205-85-R2', group: 'wirken · Гусаки TOP', type: 'goose', H: 205, Hb: 175, angle: 85, r: 2, W: 79, shelf: 53, T: 33, t: 9.5, tL: 4.75, noseL: 87, L: 835 },
+    { id: 'cat_goose85_a175', name: 'Гусак 85° A175 (артикул уточнить)', group: 'wirken · Гусаки TOP', type: 'goose', H: 175, Hb: 145, angle: 85, r: 0.8, W: 72.5, shelf: 46.5, T: 27.5, t: 10.7, tL: 5.35, noseL: 89, L: 835 },
+    { id: 'cat_top_175_85_r08_s', name: 'TOP.175-85-R08-S', group: 'wirken · Гусаки TOP', type: 'goose', H: 174.5, Hb: 144.5, angle: 85, r: 0.8, W: 66, shelf: 40, T: 28, t: 5.3, tL: 2.65, noseL: 81.5, L: 835 },
+    { id: 'cat_top_175_75_r08', name: 'TOP.175-75-R08', group: 'wirken · Гусаки TOP', type: 'goose', H: 175, Hb: 145, angle: 75, r: 0.8, W: 76, shelf: 50, T: 41, t: 12, tL: 6, noseL: 99, L: 835 },
+    { id: 'cat_top_175_75_r2', name: 'TOP.175-75-R2', group: 'wirken · Гусаки TOP', type: 'goose', H: 175, Hb: 145, angle: 75, r: 2, W: 76, shelf: 50, T: 41, t: 12, tL: 6, noseL: 99, L: 835 },
     // --- Прямые TOP ---
-    { id: 'cat_top_175_60_r08', name: 'TOP.175-60-R08', group: 'Прямые TOP', type: 'straight', H: 175, Hb: 145, angle: 60, r: 0.8, W: 26, T: 18, t: 7.8, L: 835 },
-    { id: 'cat_top_175_60_r2', name: 'TOP.175-60-R2', group: 'Прямые TOP', type: 'straight', H: 175, Hb: 145, angle: 60, r: 2, W: 26, T: 18, t: 7.8, L: 835 },
-    { id: 'cat_top_175_60_r5', name: 'TOP.175-60-R5', group: 'Прямые TOP', type: 'straight', H: 175, Hb: 145, angle: 60, r: 5, W: 37.5, T: 37.5, t: 0, L: 835 },
-    { id: 'cat_top_205_26_r08', name: 'TOP.205-26-R08', group: 'Прямые TOP', type: 'straight', H: 205, Hb: 175, angle: 26, r: 0.8, W: 26, T: 18, t: 20.6, L: 835 },
+    { id: 'cat_top_175_60_r08', name: 'TOP.175-60-R08', group: 'wirken · Прямые TOP', type: 'straight', H: 175, Hb: 145, angle: 60, r: 0.8, W: 26, T: 18, t: 7.8, L: 835 },
+    { id: 'cat_top_175_60_r2', name: 'TOP.175-60-R2', group: 'wirken · Прямые TOP', type: 'straight', H: 175, Hb: 145, angle: 60, r: 2, W: 26, T: 18, t: 7.8, L: 835 },
+    { id: 'cat_top_175_60_r5', name: 'TOP.175-60-R5', group: 'wirken · Прямые TOP', type: 'straight', H: 175, Hb: 145, angle: 60, r: 5, W: 37.5, T: 37.5, t: 0, L: 835 },
+    { id: 'cat_top_205_26_r08', name: 'TOP.205-26-R08', group: 'wirken · Прямые TOP', type: 'straight', H: 205, Hb: 175, angle: 26, r: 0.8, W: 26, T: 18, t: 20.6, L: 835 },
     // --- Короткие PK / DK ---
-    { id: 'cat_pk_97_90_r06', name: 'PK.97-90-R06', group: 'Короткие PK / DK', type: 'straight', H: 97, Hb: 67, angle: 90, r: 0.6, W: 26, T: 15, t: 4, L: 835 },
-    { id: 'cat_pk_97_90_r08', name: 'PK.97-90-R08', group: 'Короткие PK / DK', type: 'straight', H: 96.5, Hb: 66.5, angle: 90, r: 0.8, W: 26, T: 19, t: 9, L: 835 },
-    { id: 'cat_pk_97_90_r025', name: 'PK.97-90-R025', group: 'Короткие PK / DK', type: 'straight', H: 96.5, Hb: 66.5, angle: 90, r: 0.25, W: 26, T: 19, t: 9, L: 835 },
-    { id: 'cat_pk_114_90_r06', name: 'PK.114-90-R06', group: 'Короткие PK / DK', type: 'goose', H: 114, Hb: 84, angle: 90, r: 0.6, W: 47.5, shelf: 21.5, T: 30, t: 7, tL: 3.5, noseL: 27.5, L: 835 },
-    { id: 'cat_pk_116_90_r08', name: 'PK.116-90-R08', group: 'Короткие PK / DK', type: 'straight', H: 116, Hb: 86, angle: 90, r: 0.8, W: 26, T: 16.5, t: 9, L: 835 },
-    { id: 'cat_dk_116_90_r08', name: 'DK.116-90-R08', group: 'Короткие PK / DK', type: 'straight', H: 116, Hb: 86, angle: 90, r: 0.8, W: 26, T: 17.5, t: 9.8, L: 835 }
+    { id: 'cat_pk_97_90_r06', name: 'PK.97-90-R06', group: 'wirken · Короткие PK / DK', type: 'straight', H: 97, Hb: 67, angle: 90, r: 0.6, W: 26, T: 15, t: 4, L: 835 },
+    { id: 'cat_pk_97_90_r08', name: 'PK.97-90-R08', group: 'wirken · Короткие PK / DK', type: 'straight', H: 96.5, Hb: 66.5, angle: 90, r: 0.8, W: 26, T: 19, t: 9, L: 835 },
+    { id: 'cat_pk_97_90_r025', name: 'PK.97-90-R025', group: 'wirken · Короткие PK / DK', type: 'straight', H: 96.5, Hb: 66.5, angle: 90, r: 0.25, W: 26, T: 19, t: 9, L: 835 },
+    { id: 'cat_pk_114_90_r06', name: 'PK.114-90-R06', group: 'wirken · Короткие PK / DK', type: 'goose', H: 114, Hb: 84, angle: 90, r: 0.6, W: 47.5, shelf: 21.5, T: 30, t: 7, tL: 3.5, noseL: 27.5, L: 835 },
+    { id: 'cat_pk_116_90_r08', name: 'PK.116-90-R08', group: 'wirken · Короткие PK / DK', type: 'straight', H: 116, Hb: 86, angle: 90, r: 0.8, W: 26, T: 16.5, t: 9, L: 835 },
+    { id: 'cat_dk_116_90_r08', name: 'DK.116-90-R08', group: 'wirken · Короткие PK / DK', type: 'straight', H: 116, Hb: 86, angle: 90, r: 0.8, W: 26, T: 17.5, t: 9.8, L: 835 }
   ],
   // Матрицы — пока образцы, заменим позициями каталога
   dies: [

@@ -58,7 +58,8 @@
 
   // Каталог (общий, только чтение) + «Мои» (личные)
   const CAT = LG.CATALOG || { punches: [], dies: [] };
-  const isCat = id => String(id || '').indexOf('cat_') === 0;
+  const catIds = new Set(CAT.punches.concat(CAT.dies).map(x => x.id));
+  const isCat = id => catIds.has(id);
   const allPunches = () => CAT.punches.concat(ST.punches);
   const allDies = () => CAT.dies.concat(ST.dies);
   const findPunch = id => allPunches().find(x => x.id === id);
@@ -233,7 +234,7 @@
       ? '<div class="field span2"><label>Название</label><input type="text" id="punchName" value="' + esc(pu.name) + '"></div>' +
         '<div class="field span2 muted small">Тип: <b>' + (pu.type === 'custom' ? 'по каталогу' + (pu.group ? ' · ' + esc(pu.group) : '') : pu.type === 'straight' ? 'прямой' : 'гусак') + '</b></div>' +
         (pu.type === 'custom'
-          ? '<p class="field span2 muted small">Контур по чертежу каталога' + (pu.note ? ' (' + esc(pu.note) + ')' : '') + '. A = ' + fmt(pu.H, 1) + ' мм, H = A − 30 = ' + fmt(pu.Hb, 1) + ' мм, угол ' + fmt(pu.angle, 1) + '°.</p>' +
+          ? '<p class="field span2 muted small">Точный контур по чертежу' + (pu.note ? ' (' + esc(pu.note) + ')' : '') + '. A = ' + fmt(pu.H, 1) + ' мм, H = ' + fmt(pu.Hb, 1) + ' мм' + (pu.angle ? ', угол ' + fmt(pu.angle, 1) + '°' : '') + '.</p>' +
             PUNCH_F.filter(f => ['L', 'r'].indexOf(f[0]) >= 0).map(f => stepper('punch', f[0], pu[f[0]], f[2], f[3], f[4], f[1])).join('')
           : PUNCH_F.filter(f => pu.type !== 'straight' || ['W', 'shelf', 'tL', 'noseL'].indexOf(f[0]) < 0).map(f => stepper('punch', f[0], pu[f[0]], f[2], f[3], f[4], f[1])).join(''))
       : '<p class="muted">Нет пуансонов</p>';
@@ -258,11 +259,18 @@
 
   function renderPunchSide() {
     const item = x => '<button type="button" class="side-item' + (x.id === ST.ui.editPunch ? ' on' : '') + '" data-pick-punch="' + x.id + '">' +
-      punchThumb(x) + '<span><b>' + esc(x.name) + '</b><span class="muted small">A' + fmt(x.H, 1) + ' · H' + fmt(x.Hb, 1) + ' · ' + fmt(x.angle, 1) + '° · R' + fmt(x.r, 2) + '</span></span></button>';
+      punchThumb(x) + '<span><b>' + esc(x.name) + '</b><span class="muted small">A' + fmt(x.H, 1) + ' · H' + fmt(x.Hb, 1) + (x.angle ? ' · ' + fmt(x.angle, 1) + '°' : '') + ' · R' + fmt(x.r, 2) + '</span></span></button>';
+    // Поиск по названию, группе и типу; группы каталога сворачиваются (открыта та, где выбранный, или все при поиске)
+    const q = (ST.ui.punchQ || '').trim().toLowerCase();
+    const match = x => !q || q.split(/\s+/).every(w => (x.name + ' ' + (x.group || '') + ' ' + (x.type === 'goose' ? 'гусак' : x.type === 'straight' ? 'прямой' : '')).toLowerCase().indexOf(w) >= 0);
+    const groups = catGroups(CAT.punches).map(g => [g[0], g[1].filter(match)]).filter(g => g[1].length);
+    const mine = ST.punches.filter(match);
     $('#punchSide').innerHTML =
-      catGroups(CAT.punches).map(g => '<div class="side-h">Каталог · ' + esc(g[0]) + '</div>' + g[1].map(item).join('')).join('') +
+      groups.map(g => '<details class="cat-grp"' + (q || g[1].some(x => x.id === ST.ui.editPunch) ? ' open' : '') + '><summary>' + esc(g[0]) +
+        ' <span class="muted">' + g[1].length + '</span></summary>' + g[1].map(item).join('') + '</details>').join('') +
+      (q && !groups.length && !mine.length ? '<p class="muted small">Ничего не найдено.</p>' : '') +
       '<div class="side-h">Мои пуансоны</div>' +
-      (ST.punches.length ? ST.punches.map(item).join('') : '<p class="muted small">Пусто. Выберите позицию каталога и нажмите «+ Копия», чтобы сделать свою.</p>');
+      (mine.length ? mine.map(item).join('') : '<p class="muted small">' + (q ? 'Нет совпадений.' : 'Пусто. Выберите позицию каталога и нажмите «+ Копия», чтобы сделать свою.') + '</p>');
   }
 
   function punchMass(pu, ps) {
@@ -327,7 +335,7 @@
     h += SV.dim({ x: ps.x0, y: top }, { x: ps.x1, y: top }, fs * 2.6, fmt(ps.width, 1), fs * 0.9);
     h += SV.dim({ x: ps.x1, y: 0 }, { x: ps.x1, y: top }, -(fs * 4.6), 'A ' + fmt(pu.H, 1), fs);
     h += SV.dim({ x: ps.x1, y: 0 }, { x: ps.x1, y: ps.H }, -(fs * 2), 'H ' + fmt(pu.Hb, 1), fs * 0.85);
-    h += SV.text({ x: fs * 2.8, y: fs * 1.4 }, fmt(pu.angle, 1) + '°', fs * 0.9, 'lbl');
+    if (pu.angle) h += SV.text({ x: fs * 2.8, y: fs * 1.4 }, fmt(pu.angle, 1) + '°', fs * 0.9, 'lbl');
     h += SV.line({ x: 0, y: 0 }, { x: -fs * 3, y: -fs * 1.4 }, 'dim-l');
     h += SV.text({ x: -fs * 4.2, y: -fs * 1.6 }, 'R' + fmt(pu.r, 2), fs * 0.8, 'lbl');
     const b = G.bounds(ps.outline);
@@ -356,6 +364,7 @@
       saveAll(); renderPunchTab();
     });
     root.addEventListener('input', e => {
+      if (e.target.id === 'punchSearch') { ST.ui.punchQ = e.target.value; renderPunchSide(); return; }
       if (e.target.id !== 'punchName') return;
       const o = curPunch();
       if (o) { o.name = e.target.value; saveAll(); renderPunchSide(); }
