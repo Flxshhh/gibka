@@ -1042,6 +1042,7 @@
   }
 
   // Список матриц: поиск + сворачиваемые группы каталога (как у пуансонов)
+  const dieOpen = new Set();   // какие папки открыты вручную — остаются открытыми после перерисовки
   function renderDieSide() {
     const item = x => '<button type="button" class="side-item' + (x.id === ST.ui.editDie ? ' on' : '') + '" data-pick-die="' + x.id + '">' +
       dieThumb(x) + '<span><b>' + esc(x.name) + '</b><span class="muted small">V' + fmt(x.V, 1) + ' · ' + fmt(x.angle, 0) + '° · R' + fmt(x.r, 1) + ' · H' + fmt(x.H, 0) + (x.group ? ' · ' + esc(x.group) : '') + '</span></span></button>';
@@ -1050,8 +1051,17 @@
     const groups = catGroups(CAT.dies, byV).map(g => [g[0], g[1].filter(match)]).filter(g => g[1].length);
     const mine = ST.dies.filter(match);
     $('#dieList').innerHTML =
-      groups.map(g => '<details class="cat-grp"' + (q || g[1].some(x => x.id === ST.ui.editDie) ? ' open' : '') + '><summary>' + esc(g[0]) +
-        ' <span class="muted">' + g[1].length + '</span></summary>' + g[1].map(item).join('') + '</details>').join('') +
+      groups.map(g => {
+        // внутри папки угла — вложенные папки по ширине ручья V
+        const vs = [];
+        g[1].forEach(x => { const v = fmt(x.V, 1); let b = vs.find(z => z[0] === v); if (!b) vs.push(b = [v, []]); b[1].push(x); });
+        const isOpen = (key, list) => q || dieOpen.has(key) || list.some(x => x.id === ST.ui.editDie);
+        return '<details class="cat-grp" data-key="' + esc(g[0]) + '"' + (isOpen(g[0], g[1]) ? ' open' : '') + '><summary>' + esc(g[0]) +
+          ' <span class="muted">' + g[1].length + '</span></summary>' +
+          vs.map(v => '<details class="cat-grp sub" data-key="' + esc(g[0] + '|' + v[0]) + '"' + (isOpen(g[0] + '|' + v[0], v[1]) ? ' open' : '') +
+            '><summary>V' + v[0] + ' <span class="muted">' + v[1].length + '</span></summary>' + v[1].map(item).join('') + '</details>').join('') +
+          '</details>';
+      }).join('') +
       (q && !groups.length && !mine.length ? '<p class="muted small">Ничего не найдено.</p>' : '') +
       '<div class="side-h">Мои матрицы</div>' +
       (mine.length ? mine.map(item).join('') : '<p class="muted small">' + (q ? 'Нет совпадений.' : 'Пусто. Выберите позицию каталога и нажмите «+ Копия».') + '</p>');
@@ -1116,6 +1126,12 @@
         default: return;
       }
       saveAll(); renderDiesTab();
+    });
+    // запоминаем только то, что открыл/закрыл сам пользователь
+    $('#dieList').addEventListener('click', e => {
+      const sm = e.target.closest('summary'); if (!sm || (ST.ui.dieQ || '').trim()) return;
+      const d = sm.parentElement, k = d.dataset.key;
+      setTimeout(() => { if (d.open) dieOpen.add(k); else dieOpen.delete(k); }, 0);
     });
     root.addEventListener('input', e => {
       if (e.target.id === 'dieSearch') { ST.ui.dieQ = e.target.value; renderDieSide(); return; }
