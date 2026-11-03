@@ -740,7 +740,8 @@
           ? (pl.exhaustive ? 'Проверены все порядки гибов и все положения детали (развернуть другим краем к упору, перевернуть лист). Показан вариант с наименьшим числом ударов.'
                            : 'Проверено несколько тысяч вариантов порядка и положения детали — без ударов не нашлось.')
           : 'Это ваш порядок гибов — нажмите «Подобрать авто», чтобы перебрать все варианты.') + '</div>';
-      if (PLAYER.alts && PLAYER.alts.length) {
+      if (PLAYER.altsBusy && !(PLAYER.alts && PLAYER.alts.length)) h += '<div class="small muted">Подбираю пуансон, который подойдёт…</div>';
+      else if (PLAYER.alts && PLAYER.alts.length) {
         h += '<div class="alts">Подойдут без удара, например: ' + PLAYER.alts.map((a, i) =>
           '<button type="button" class="sm" data-alt="' + i + '">' + (a.same ? 'этот же, выемкой ' + (a.mirror ? 'к упору' : 'к оператору')
             : esc(a.name) + ' · A' + fmt(a.H, 0) + (a.angle ? ' · ' + fmt(a.angle, 0) + '°' : '') + (a.mirror !== !!ST.part.punchMirror ? ' · выемкой ' + (a.mirror ? 'к упору' : 'к оператору') : '')) +
@@ -859,13 +860,18 @@
   function buildPlan() {
     const r = R;
     PLAYER.pause();
-    if (r.an.errors.length || !r.an.bends.length || !r.punch) { PLAYER.plan = null; PLAYER.sim = null; drawFrame(); return; }
+    if (r.an.errors.length || !r.an.bends.length || !r.punch) { PLAYER.plan = null; PLAYER.sim = null; PLAYER.key = null; drawFrame(); return; }
+    // Ничего не поменялось (например, просто вернулись на вкладку) — не пересчитываем
+    const key = JSON.stringify([ST.part, r.punch, r.die, ST.machine, r.Ri, r.K]);
+    if (key === PLAYER.key && PLAYER.plan) { drawFrame(); return; }
+    PLAYER.key = key;
     const sim = new LG.Sim({ an: r.an, S: r.S, Ri: r.Ri, K: r.K, punch: r.punch, punchMirror: !!ST.part.punchMirror, die: r.die, machine: ST.machine });
     let order = ST.part.order;
     if (order && (order.length !== r.an.bends.length || uniq(order).length !== order.length || order.some(i => i >= r.an.bends.length))) order = null;
     PLAYER.sim = sim;
     PLAYER.plan = sim.plan(order);
-    PLAYER.alts = PLAYER.plan.ok ? [] : findAlternatives(r);
+    PLAYER.alts = [];
+    if (!PLAYER.plan.ok) findAlternatives(r);   // в фоне, по кусочкам — страница не подвисает
     PLAYER.t = 0;
     PLAYER.view = computeView(sim, PLAYER.plan);
     drawFrame();
@@ -875,21 +881,29 @@
   // Если с текущим пуансоном удар — ищем 2–3 подходящих: сначала тот же с выемкой в другую сторону,
   // потом самые похожие по высоте и углу. Перебор ограничен по времени, чтобы страница не подвисала.
   function findAlternatives(r) {
-    const cur = r.punch, out = [], t0 = performance.now();
+    const cur = r.punch, out = [], t0 = performance.now(), token = PLAYER.key;
+    PLAYER.altsBusy = true;
     const score = pu => Math.abs((pu.H || 0) - (cur.H || 0)) / 40 + ((pu.angle && cur.angle) ? Math.abs(pu.angle - cur.angle) / 15 : 1);
     const cands = [{ pu: cur, m: !ST.part.punchMirror }].concat(
       allPunches().filter(pu => pu.id !== cur.id).sort((a, b) => score(a) - score(b))
         .reduce((acc, pu) => acc.concat([{ pu, m: !!ST.part.punchMirror }, { pu, m: !ST.part.punchMirror }]), []));
-    let tried = 0;
-    for (const c of cands) {
-      if (out.length >= 3 || performance.now() - t0 > 2500) break;
-      if (out.some(o => o.id === c.pu.id)) continue;
-      tried++;
-      const sim = new LG.Sim({ an: r.an, S: r.S, Ri: r.Ri, K: r.K, punch: c.pu, punchMirror: c.m, die: r.die, machine: ST.machine });
-      if (sim.plan(null, 400).ok) out.push({ id: c.pu.id, name: c.pu.name, mirror: c.m, H: c.pu.H, angle: c.pu.angle, same: c.pu.id === cur.id });
-    }
-    out.exhausted = tried >= cands.length;
-    return out;
+    let k = 0;
+    const slice = () => {
+      if (PLAYER.key !== token) return;               // деталь или инструмент уже поменяли — этот поиск не нужен
+      const ts = performance.now();
+      while (k < cands.length && out.length < 3 && performance.now() - ts < 30) {
+        const c = cands[k++];
+        if (out.some(o => o.id === c.pu.id)) continue;
+        const sim = new LG.Sim({ an: r.an, S: r.S, Ri: r.Ri, K: r.K, punch: c.pu, punchMirror: c.m, die: r.die, machine: ST.machine });
+        if (sim.plan(null, 400).ok) out.push({ id: c.pu.id, name: c.pu.name, mirror: c.m, H: c.pu.H, angle: c.pu.angle, same: c.pu.id === cur.id });
+      }
+      const done = out.length >= 3 || k >= cands.length || performance.now() - t0 > 6000;
+      if (!done) { setTimeout(slice, 0); return; }
+      out.exhausted = k >= cands.length;
+      PLAYER.alts = out; PLAYER.altsBusy = false;
+      if (ST.ui.tab === 'sim') renderBends();
+    };
+    setTimeout(slice, 0);
   }
 
   function computeView(sim, plan) {
@@ -1013,6 +1027,8 @@
     $('#dieForm').innerHTML = di ? '<div class="field span2"><label>Название</label><input type="text" id="dieName" value="' + esc(di.name) + '"></div>' +
       (di.type === 'custom' ? '<div class="field span2 muted small">По чертежу DXF · ' + esc(di.group || '') + (di.note ? ' · ' + esc(di.note) : '') +
         ' · глубина ручья ' + fmt(di.vDepth, 1) + ' мм</div>' : '') +
+      (di.others && di.others.length ? '<div class="field span2 small"><b>Другие ручьи этой матрицы:</b> ' + di.others.map(o =>
+        'V' + fmt(o.V, 1) + ' · ' + fmt(o.angle, 0) + '° · R' + fmt(o.r, 1) + ' · глубина ' + fmt(o.depth, 1) + (o.face ? ' <span class="muted">(другой гранью вверх)</span>' : ' <span class="muted">(рядом)</span>')).join('; ') + '</div>' : '') +
       DIE_F.map(f => stepper('die', f[0], di[f[0]], f[2], f[3], f[4], f[1])).join('') : '<p class="muted">Нет матриц</p>';
     lockIfCatalog('#dieForm', isCat(ST.ui.editDie));
     $('#dieDel').hidden = isCat(ST.ui.editDie);
@@ -1054,6 +1070,11 @@
     h += SV.dim({ x: bb.x1, y: 0 }, { x: bb.x1, y: ds.top }, -fs * 1.4, 'H ' + fmt(di.H, 1), fs);
     h += SV.text({ x: 0, y: ds.top - ds.vDepth - fs * 0.9 }, fmt(di.angle, 0) + '°', fs * 0.9, 'lbl');
     h += SV.text({ x: di.V / 2 + fs * 2.2, y: ds.top + fs * 0.6 }, 'R' + fmt(di.r, 2), fs * 0.75, 'lbl');
+    // остальные ручьи на этой же грани — тоже с размерами
+    (di.others || []).filter(o => o.dx != null).forEach(o => {
+      h += SV.dim({ x: o.dx - o.V / 2, y: ds.top }, { x: o.dx + o.V / 2, y: ds.top }, fs * 1.2, 'V ' + fmt(o.V, 1), fs);
+      h += SV.text({ x: o.dx, y: ds.top - o.depth - fs * 0.9 }, fmt(o.angle, 0) + '°', fs * 0.9, 'lbl');
+    });
     const b = G.bounds(ds.poly);
     b.x0 -= fs * 2; b.x1 += fs * 3.5; b.y0 -= fs * 3; b.y1 += fs * 3.5;
     $('#dieSvg').setAttribute('viewBox', SV.viewBox(b, 0));
