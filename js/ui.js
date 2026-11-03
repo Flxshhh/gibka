@@ -1079,27 +1079,44 @@
     const bb = G.bounds(ds.poly);
     const fs = Math.max(ds.W, di.H) / 14;
     let h = SV.path(ds.poly, 'm-die');
-    h += SV.dim({ x: -di.V / 2, y: ds.top }, { x: di.V / 2, y: ds.top }, fs * 1.2, 'V ' + fmt(di.V, 1), fs);
-    const faces = (di.others || []).some(o => o.pts), go = faces ? 3.6 : 1.4;   // есть ручьи по бокам — общие размеры выносим дальше
+    // Размеры всех ручьёв: рабочий и соседние сверху, остальные — на своих гранях
+    const dims = [{ a: { x: -di.V / 2, y: ds.top }, b: { x: di.V / 2, y: ds.top }, t: 'V ' + fmt(di.V, 1) }];
+    (di.others || []).forEach(o => {
+      if (o.dx != null) {
+        dims.push({ a: { x: o.dx - o.V / 2, y: ds.top }, b: { x: o.dx + o.V / 2, y: ds.top }, t: 'V ' + fmt(o.V, 1) });
+        h += SV.text({ x: o.dx, y: ds.top - o.depth - fs * 0.9 }, fmt(o.angle, 0) + '°', fs * 0.9, 'lbl');
+      } else if (o.pts) {
+        let [a, b, c] = o.pts.map(p => ({ x: p[0], y: p[1] }));
+        const m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+        if (-(b.y - a.y) * (m.x - c.x) + (b.x - a.x) * (m.y - c.y) < 0) [a, b] = [b, a];   // выносная линия — наружу от ручья
+        dims.push({ a, b, t: 'V ' + fmt(o.V, 1) });
+        h += SV.text({ x: c.x + (m.x - c.x) * 0.45, y: c.y + (m.y - c.y) * 0.45 - fs * 0.3 }, fmt(o.angle, 0) + '°', fs * 0.9, 'lbl');   // угол — в просвете ручья
+      }
+    });
+    // на одной грани близкие размеры разносим по двум уровням, чтобы подписи не наезжали
+    const faceKey = d => { const L = Math.hypot(d.b.x - d.a.x, d.b.y - d.a.y) || 1, ux = (d.b.x - d.a.x) / L, uy = (d.b.y - d.a.y) / L;
+      d.u = ux * (d.a.x + d.b.x) / 2 + uy * (d.a.y + d.b.y) / 2; d.half = L / 2;
+      return Math.round(ux) + ',' + Math.round(uy) + ',' + Math.round(-uy * d.a.x + ux * d.a.y); };
+    const byFace = {};
+    dims.forEach(d => (byFace[faceKey(d)] = byFace[faceKey(d)] || []).push(d));
+    let maxLvl = 0;
+    Object.values(byFace).forEach(list => {
+      list.sort((p, q) => p.u - q.u);
+      list.forEach((d, i) => {
+        const pv = list[i - 1];
+        d.lvl = pv && (d.u - d.half) - (pv.u + pv.half) < fs * 3.2 && Math.max(d.half, pv.half) * 2 < fs * 5 ? 1 - pv.lvl : 0;
+        maxLvl = Math.max(maxLvl, d.lvl);
+      });
+    });
+    dims.forEach(d => { h += SV.dim(d.a, d.b, fs * (1.2 + 1.7 * d.lvl), d.t, fs); });
+    const faces = (di.others || []).some(o => o.pts), go = (faces ? 3.6 : 1.4) + (faces ? maxLvl * 1.7 : 0);   // общие размеры — за размерами ручьёв
     h += SV.dim({ x: bb.x0, y: 0 }, { x: bb.x1, y: 0 }, -fs * go, fmt(ds.W, 1), fs);
     h += SV.dim({ x: bb.x1, y: 0 }, { x: bb.x1, y: ds.top }, -fs * go, 'H ' + fmt(di.H, 1), fs);
     h += SV.text({ x: 0, y: ds.top - ds.vDepth - fs * 0.9 }, fmt(di.angle, 0) + '°', fs * 0.9, 'lbl');
     h += SV.text({ x: di.V / 2 + fs * 2.2, y: ds.top + fs * 0.6 }, 'R' + fmt(di.r, 2), fs * 0.75, 'lbl');
-    // остальные ручьи на этой же грани — тоже с размерами
-    (di.others || []).filter(o => o.dx != null).forEach(o => {
-      h += SV.dim({ x: o.dx - o.V / 2, y: ds.top }, { x: o.dx + o.V / 2, y: ds.top }, fs * 1.2, 'V ' + fmt(o.V, 1), fs);
-      h += SV.text({ x: o.dx, y: ds.top - o.depth - fs * 0.9 }, fmt(o.angle, 0) + '°', fs * 0.9, 'lbl');
-    });
-    // ручьи на боковых и нижней гранях: размер вдоль грани, угол — внутри у дна
-    (di.others || []).filter(o => o.pts).forEach(o => {
-      let [a, b, c] = o.pts.map(p => ({ x: p[0], y: p[1] }));
-      const m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-      if (-(b.y - a.y) * (m.x - c.x) + (b.x - a.x) * (m.y - c.y) < 0) [a, b] = [b, a];   // выносная линия — наружу от ручья
-      h += SV.dim(a, b, fs * 1.2, 'V ' + fmt(o.V, 1), fs);
-      h += SV.text({ x: c.x + (m.x - c.x) * 0.45, y: c.y + (m.y - c.y) * 0.45 - fs * 0.3 }, fmt(o.angle, 0) + '°', fs * 0.9, 'lbl');   // угол — в просвете ручья
-    });
     const b = G.bounds(ds.poly);
-    b.x0 -= fs * 3.5; b.x1 += fs * (faces ? 5.5 : 3.5); b.y0 -= fs * (faces ? 5.5 : 3.5); b.y1 += fs * 3.5;
+    const pad = 3.5 + maxLvl * 1.7;
+    b.x0 -= fs * pad; b.x1 += fs * (faces ? pad + 2 : 3.5); b.y0 -= fs * (faces ? pad + 2 : 3.5); b.y1 += fs * pad;
     $('#dieSvg').setAttribute('viewBox', SV.viewBox(b, 0));
     $('#dieSvg').innerHTML = h;
   }
