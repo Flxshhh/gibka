@@ -94,16 +94,42 @@
       H: Math.max(50, Math.round(V * 0.9 + 35)), W: Math.round(V + 2 * Math.max(10, V * 0.45)) };
   }
 
+  // Подбор матриц по таблице гибов: V — из таблицы для толщины, угол матрицы не тупее самого острого гиба,
+  // самая короткая полка ляжет на плечи (B по таблице), усилие не больше пресса.
+  // Порядок: сначала V из таблицы (выбранное или среднее), потом соседние; внутри — угол ближе к нужному, проще матрица.
+  function suggestDies(S, Vt, part) {
+    const opts = C.vOptions(S);
+    const an = C.analyze(part, { S, Ri: C.riFor(Vt, part.material), K: 0.4, V: Vt });
+    const bends = an.bends.filter(b => b.abs >= 0.5);
+    const minIncl = bends.length ? Math.min.apply(null, bends.map(b => b.incl)) : 180;
+    const why = [];
+    const flangeOk = V => bends.every(b => Math.min(an.segs[b.i].outerLen, an.segs[b.i + 1].outerLen) + 1e-6 >= C.byV(V, LG.TABLE.B) * C.angleCoef(b.incl));
+    const tonOk = V => C.forcePerM(S, V, part.material).F * (+part.L || 0) / 1000 / 9.81 <= ST.machine.maxTon;
+    const okV = opts.filter(o => flangeOk(o.V) && tonOk(o.V)).map(o => o.V);
+    if (!okV.length) why.push(opts.some(o => flangeOk(o.V)) ? 'усилие больше, чем может пресс' : 'полки короче минимальной B для всех V из таблицы');
+    const wantA = Math.min(88, minIncl - 2);                   // для 90° — матрица 85–88°
+    const vRank = V => okV.indexOf(V) < 0 ? 99 : (Math.abs(V - Vt) < 0.3 ? 0 : 1 + Math.abs(Math.log(V / Vt)));
+    const list = allDies().filter(d => okV.some(V => Math.abs(d.V - V) < 0.3) && d.angle <= minIncl + 0.5)
+      .map(d => ({ d, Vt: okV.find(V => Math.abs(d.V - V) < 0.3), sc: vRank(okV.find(V => Math.abs(d.V - V) < 0.3)) * 100 +
+        Math.abs(d.angle - wantA) + (d.note && d.note.indexOf('перевернуть') >= 0 ? 3 : 0) + (d.others ? 1 : 0) + (/Вставки/.test(d.group || '') ? 5 : 0) + (isCat(d.id) ? 0 : -0.5) }))   // вставкам нужен держатель — ниже
+      .sort((a, b) => a.sc - b.sc || a.d.H - b.d.H || String(a.d.name).localeCompare(String(b.d.name)));
+    return { list: list.map(x => x.d), okV, minIncl, why };
+  }
+
   function resolve() {
     const p = ST.part;
     const S = Math.max(0.1, +p.S || 1);
     const punch = findPunch(p.punchId) || allPunches()[0];
     const opts = C.vOptions(S);
-    let die, V;
+    let die, V, sug;
     if (p.dieId === 'auto' || !findDie(p.dieId)) {
       if (p.V && !opts.some(o => o.V === p.V)) p.V = null;
       V = p.V || C.recommendedV(S);
-      die = autoDie(V);
+      sug = suggestDies(S, V, p);
+      // авто: реальная матрица из каталога с V по таблице; если ни одна не подходит — условная
+      const best = sug.list.find(d => Math.abs(d.V - V) < 0.3) || sug.list[0];
+      die = best || autoDie(V);
+      V = die.V;
     } else {
       die = findDie(p.dieId);
       V = die.V;
@@ -114,8 +140,9 @@
     const force = C.forcePerM(S, V, p.material);
     const an = C.analyze(p, { S, Ri, K, V, dieAngle: die.angle, punchAngle: punch && punch.angle });
     const fullKN = force.F * (+p.L || 0) / 1000;
-    return { S, punch, die, V, opts, riTable, Ri, K, force, fullKN, ton: fullKN / 9.81, an,
-      B90: C.byV(V, LG.TABLE.B), auto: p.dieId === 'auto' || die.id === 'auto' };
+    if (!sug) sug = suggestDies(S, p.V || C.recommendedV(S), p);
+    return { S, punch, die, V, opts, riTable, Ri, K, force, fullKN, ton: fullKN / 9.81, an, sug,
+      B90: C.byV(V, LG.TABLE.B), auto: p.dieId === 'auto' || !findDie(p.dieId) };
   }
 
   // ---------- Поле с кнопками − / + ----------
@@ -751,7 +778,8 @@
       '<div class="field"><label>Выемка пуансона (гусак)</label><select id="mirSel">' +
       '<option value="0"' + (!p.punchMirror ? ' selected' : '') + '>к оператору</option>' +
       '<option value="1"' + (p.punchMirror ? ' selected' : '') + '>к упору</option></select></div>' +
-      picker('die', 'Матрица', r.auto ? '<span><b>Авто по таблице</b><span class="muted small">V' + fmt(r.V, 1) + ' · ' + fmt(r.die.angle, 0) + '°</span></span>'
+      picker('die', 'Матрица', r.auto ? (r.die.id !== 'auto' ? dieThumb(r.die) : '') + '<span><b>Авто по таблице</b><span class="muted small">' +
+        (r.die.id !== 'auto' ? esc(r.die.name) + ' · ' : '') + 'V' + fmt(r.V, 1) + ' · ' + fmt(r.die.angle, 0) + '°</span></span>'
         : dieThumb(r.die) + '<span><b>' + esc(r.die.name) + '</b><span class="muted small">V' + fmt(r.die.V, 1) + ' · ' + fmt(r.die.angle, 0) + '° · H' + fmt(r.die.H, 0) + '</span></span>') +
       vSel +
       stepper('part', 'riOverride', p.riOverride || 0, 0.1, 0, 2, 'Ri вручную, мм (0 — авто)') +
@@ -773,7 +801,8 @@
     const over = r.ton > ST.machine.maxTon;
     let h = '<div class="kv">' +
       kv('Лист', fmt(r.S, 2) + ' мм · ' + LG.MATERIALS[p.material].name.split(',')[0]) +
-      kv('Матрица', 'V' + fmt(r.V, 1) + ' · ' + fmt(r.die.angle, 0) + '° · R' + fmt(r.die.r, 1) + (r.auto ? ' <span class="muted">(авто)</span>' : '')) +
+      kv('Матрица', (r.die.id !== 'auto' ? esc(r.die.name) + ' · ' : '') + 'V' + fmt(r.V, 1) + ' · ' + fmt(r.die.angle, 0) + '° · R' + fmt(r.die.r, 1) +
+        (r.auto ? ' <span class="muted">(авто по таблице)</span>' : '')) +
       kv('Мин. полка B', fmt(r.B90, 1) + ' мм <span class="muted">(90°)</span>') +
       kv('Ri', fmt(r.Ri, 2) + ' мм' + (p.riOverride > 0 ? ' <span class="muted">(вручную)</span>' : ' <span class="muted">(табл. ' + fmt(r.riTable, 2) + ')</span>')) +
       kv('K-фактор', fmt(r.K, 3)) +
@@ -783,6 +812,15 @@
       '</div>';
     const msgs = r.an.errors.map(e => '<li class="bad">' + esc(e) + '</li>').concat(r.an.warnings.map(w => '<li class="warn">' + esc(w) + '</li>'));
     if (msgs.length) h += '<ul class="msgs">' + msgs.join('') + '</ul>';
+    // Предложения по таблице гибов: по одной-две матрицы на каждое подходящее V
+    const sg = r.sug, shown = [], perV = {};
+    sg.list.forEach(d => { const k = fmt(d.V, 1); if ((perV[k] = (perV[k] || 0) + 1) <= 2 && shown.length < 6 && d.id !== r.die.id) shown.push(d); });
+    h += '<div class="sugg"><div class="small"><b>Матрицы по таблице гибов</b> <span class="muted">— S=' + fmt(r.S, 2) + ', V из таблицы: ' +
+      (sg.okV.length ? sg.okV.map(v => 'V' + v).join(', ') : 'нет') + (sg.minIncl < 180 ? ', самый острый гиб ' + fmt(sg.minIncl, 0) + '°' : '') + '</span></div>' +
+      (shown.length ? '<div class="alts">' + shown.map(d => '<button type="button" class="sm" data-sugdie="' + d.id + '">' + esc(d.name) +
+        ' · V' + fmt(d.V, 1) + ' · ' + fmt(d.angle, 0) + '°</button>').join(' ') + '</div>'
+        : '<div class="small muted">' + (sg.why.length ? 'Не подходит ни одна: ' + sg.why.join(', ') + '.' : 'Других подходящих матриц в каталоге нет.') + '</div>') +
+      (!r.auto ? '<div class="small"><button type="button" class="link" data-sugdie="auto">Вернуть авто по таблице</button></div>' : '') + '</div>';
     $('#calcOut').innerHTML = h;
   }
 
@@ -863,6 +901,8 @@
         });
         return;
       }
+      const sug = e.target.closest('[data-sugdie]');
+      if (sug) { p.dieId = sug.dataset.sugdie; p.order = null; saveAll(); renderSimTab(); return; }
       const sp = e.target.closest('[data-sim-punch]'), sd = e.target.closest('[data-sim-die]');
       if (sp || sd) {
         if (sp) p.punchId = sp.dataset.simPunch; else p.dieId = sd.dataset.simDie;
