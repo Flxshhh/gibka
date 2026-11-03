@@ -812,15 +812,7 @@
       '</div>';
     const msgs = r.an.errors.map(e => '<li class="bad">' + esc(e) + '</li>').concat(r.an.warnings.map(w => '<li class="warn">' + esc(w) + '</li>'));
     if (msgs.length) h += '<ul class="msgs">' + msgs.join('') + '</ul>';
-    // Предложения по таблице гибов: по одной-две матрицы на каждое подходящее V
-    const sg = r.sug, shown = [], perV = {};
-    sg.list.forEach(d => { const k = fmt(d.V, 1); if ((perV[k] = (perV[k] || 0) + 1) <= 2 && shown.length < 6 && d.id !== r.die.id) shown.push(d); });
-    h += '<div class="sugg"><div class="small"><b>Матрицы по таблице гибов</b> <span class="muted">— S=' + fmt(r.S, 2) + ', V из таблицы: ' +
-      (sg.okV.length ? sg.okV.map(v => 'V' + v).join(', ') : 'нет') + (sg.minIncl < 180 ? ', самый острый гиб ' + fmt(sg.minIncl, 0) + '°' : '') + '</span></div>' +
-      (shown.length ? '<div class="alts">' + shown.map(d => '<button type="button" class="sm" data-sugdie="' + d.id + '">' + esc(d.name) +
-        ' · V' + fmt(d.V, 1) + ' · ' + fmt(d.angle, 0) + '°</button>').join(' ') + '</div>'
-        : '<div class="small muted">' + (sg.why.length ? 'Не подходит ни одна: ' + sg.why.join(', ') + '.' : 'Других подходящих матриц в каталоге нет.') + '</div>') +
-      (!r.auto ? '<div class="small"><button type="button" class="link" data-sugdie="auto">Вернуть авто по таблице</button></div>' : '') + '</div>';
+    if (!r.auto) h += '<div class="small"><button type="button" class="link" data-sugdie="auto">Вернуть авто по таблице (среднее V' + C.recommendedV(r.S) + ')</button></div>';
     $('#calcOut').innerHTML = h;
   }
 
@@ -846,8 +838,17 @@
             : esc(a.name) + ' · A' + fmt(a.H, 0) + (a.angle ? ' · ' + fmt(a.angle, 0) + '°' : '') + (a.mirror !== !!ST.part.punchMirror ? ' · выемкой ' + (a.mirror ? 'к упору' : 'к оператору') : '')) +
           '</button>').join(' ') + '</div>';
       } else if (auto) h += '<div class="small">' + (PLAYER.alts && PLAYER.alts.exhausted
-          ? 'Ни один пуансон из каталога и «Моих» не подходит — нужна другая матрица или другая деталь.'
-          : 'Среди похожих пуансонов подходящего не нашлось. Попробуйте другую матрицу или порядок гибов вручную.') + '</div>';
+          ? 'Ни один пуансон из каталога и «Моих» не подходит с этой матрицей.'
+          : 'Среди похожих пуансонов подходящего не нашлось.') + '</div>';
+      // второй вариант — поменять матрицу (подбор по таблице от среднего V)
+      if (!PLAYER.altsBusy) {
+        if (PLAYER.dieAltsBusy) h += '<div class="small muted">Подбираю матрицу по таблице…</div>';
+        else if (PLAYER.dieAlts && PLAYER.dieAlts.length) h += '<div class="alts">' + (PLAYER.alts && PLAYER.alts.length ? 'Или оставить пуансон и поменять матрицу' : 'С этим пуансоном получится, если поменять матрицу') +
+          ' <span class="muted">(по таблице, от среднего V' + PLAYER.dieVmid + ')</span>: ' + PLAYER.dieAlts.map(d =>
+            '<button type="button" class="sm" data-sugdie="' + d.id + '"' + (d.mirror !== !!ST.part.punchMirror ? ' data-mir="' + (d.mirror ? 1 : 0) + '"' : '') + '>' + esc(d.name) + ' · V' + fmt(d.V, 1) + ' · ' + fmt(d.angle, 0) + '°' +
+            (d.mirror !== !!ST.part.punchMirror ? ' · выемкой ' + (d.mirror ? 'к упору' : 'к оператору') : '') + '</button>').join(' ') + '</div>';
+        else if (auto && !(PLAYER.alts && PLAYER.alts.length)) h += '<div class="small">Сменой матрицы по таблице тоже не получается — нужна другая деталь или порядок гибов вручную.</div>';
+      }
       h += '</div>';
     }
     h += '<div class="row between"><div>' + (auto
@@ -902,7 +903,11 @@
         return;
       }
       const sug = e.target.closest('[data-sugdie]');
-      if (sug) { p.dieId = sug.dataset.sugdie; p.order = null; saveAll(); renderSimTab(); return; }
+      if (sug) {
+        p.dieId = sug.dataset.sugdie; p.order = null;
+        if (sug.dataset.mir != null) p.punchMirror = sug.dataset.mir === '1';
+        saveAll(); renderSimTab(); return;
+      }
       const sp = e.target.closest('[data-sim-punch]'), sd = e.target.closest('[data-sim-die]');
       if (sp || sd) {
         if (sp) p.punchId = sp.dataset.simPunch; else p.dieId = sd.dataset.simDie;
@@ -996,7 +1001,7 @@
     if (order && (order.length !== r.an.bends.length || uniq(order).length !== order.length || order.some(i => i >= r.an.bends.length))) order = null;
     PLAYER.sim = sim;
     PLAYER.plan = sim.plan(order);
-    PLAYER.alts = [];
+    PLAYER.alts = []; PLAYER.dieAlts = []; PLAYER.dieAltsBusy = false;
     if (!PLAYER.plan.ok) findAlternatives(r);   // в фоне, по кусочкам — страница не подвисает
     PLAYER.t = 0;
     PLAYER.view = computeView(sim, PLAYER.plan);
@@ -1027,6 +1032,38 @@
       if (!done) { setTimeout(slice, 0); return; }
       out.exhausted = k >= cands.length;
       PLAYER.alts = out; PLAYER.altsBusy = false;
+      if (ST.ui.tab === 'sim') renderBends();
+      findDieAlternatives(r, token);
+    };
+    setTimeout(slice, 0);
+  }
+
+  // Второй приоритет — матрица. С текущим пуансоном перебираем матрицы по таблице гибов,
+  // начиная со среднего V для этой толщины (диагональ таблицы), затем соседние V.
+  function findDieAlternatives(r, token) {
+    const out = [], t0 = performance.now();
+    const Vmid = C.recommendedV(r.S);
+    const cands = suggestDies(r.S, Vmid, ST.part).list.filter(d => d.id !== r.die.id);
+    PLAYER.dieAlts = []; PLAYER.dieAltsBusy = true; PLAYER.dieVmid = Vmid;
+    let k = 0;
+    const slice = () => {
+      if (PLAYER.key !== token) return;
+      const ts = performance.now();
+      while (k < cands.length && out.length < 3 && performance.now() - ts < 30) {
+        const d = cands[k++];
+        if (out.some(o => Math.abs(o.V - d.V) < 0.3 && o.angle === d.angle)) continue;   // разные V/углы, а не три одинаковые
+        const Ri = ST.part.riOverride > 0 ? +ST.part.riOverride : Math.max(C.riFor(d.V, ST.part.material), r.punch.r || 0);
+        const K = ST.part.kOverride > 0 ? +ST.part.kOverride : C.kFactor(Ri, r.S);
+        const an = C.analyze(ST.part, { S: r.S, Ri, K, V: d.V, dieAngle: d.angle, punchAngle: r.punch.angle });
+        if (an.errors.length) continue;
+        for (const m of [!!ST.part.punchMirror, !ST.part.punchMirror]) {
+          const sim = new LG.Sim({ an, S: r.S, Ri, K, punch: r.punch, punchMirror: m, die: d, machine: ST.machine });
+          if (sim.plan(null, 400).ok) { out.push({ id: d.id, name: d.name, V: d.V, angle: d.angle, mirror: m }); break; }
+        }
+      }
+      const done = out.length >= 3 || k >= cands.length || performance.now() - t0 > 6000;
+      if (!done) { setTimeout(slice, 0); return; }
+      PLAYER.dieAlts = out; PLAYER.dieAltsBusy = false;
       if (ST.ui.tab === 'sim') renderBends();
     };
     setTimeout(slice, 0);
