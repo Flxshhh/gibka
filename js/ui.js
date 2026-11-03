@@ -251,12 +251,13 @@
   }
 
   // Группы каталога в порядке появления
-  function catGroups(list) {
+  // внутри группы пуансоны — по углу кромки (без угла — в конце), затем по высоте; матрицы — по V, затем по углу
+  const byAngle = (a, b) => ((a.angle || 999) - (b.angle || 999)) || (a.H - b.H) || String(a.name).localeCompare(String(b.name));
+  const byV = (a, b) => (a.V - b.V) || (a.angle - b.angle) || (a.H - b.H) || String(a.name).localeCompare(String(b.name));
+  function catGroups(list, cmp) {
     const order = [], map = {};
     list.forEach(x => { const g = x.group || 'Каталог'; if (!map[g]) { map[g] = []; order.push(g); } map[g].push(x); });
-    // внутри группы — по углу кромки (без угла — в конце), затем по высоте
-    const byAngle = (a, b) => ((a.angle || 999) - (b.angle || 999)) || (a.H - b.H) || String(a.name).localeCompare(String(b.name));
-    return order.map(g => [g, map[g].slice().sort(byAngle)]);
+    return order.map(g => [g, map[g].slice().sort(cmp || byAngle)]);
   }
 
   function renderPunchSide() {
@@ -680,7 +681,7 @@
       '<option value="0"' + (!p.punchMirror ? ' selected' : '') + '>к оператору</option>' +
       '<option value="1"' + (p.punchMirror ? ' selected' : '') + '>к упору</option></select></div>' +
       '<div class="field"><label>Матрица</label><select id="dieSel"><option value="auto">Авто по таблице</option>' +
-      optGroups([['Каталог', CAT.dies], ['Мои', ST.dies]], p.dieId) + '</select></div>' +
+      optGroups(catGroups(CAT.dies, byV).map(g => ['Каталог · ' + g[0], g[1]]).concat([['Мои', ST.dies]]), p.dieId) + '</select></div>' +
       vSel +
       stepper('part', 'riOverride', p.riOverride || 0, 0.1, 0, 2, 'Ri вручную, мм (0 — авто)') +
       stepper('part', 'kOverride', p.kOverride || 0, 0.01, 0, 2, 'K-фактор вручную (0 — авто)');
@@ -998,10 +999,10 @@
   function renderDiesTab() {
     if (!findDie(ST.ui.editDie)) ST.ui.editDie = (allDies()[0] || {}).id;
     const di = findDie(ST.ui.editDie);
-    const pill = x => '<button type="button" class="pill' + (x.id === ST.ui.editDie ? ' on' : '') + '" data-pick-die="' + x.id + '">' + esc(x.name) + '</button>';
-    $('#dieList').innerHTML = '<span class="pills-h">Каталог</span>' + CAT.dies.map(pill).join('') +
-      '<span class="pills-h">Мои</span>' + (ST.dies.length ? ST.dies.map(pill).join('') : '<span class="muted small">пусто — «+ Копия» из каталога</span>');
+    renderDieSide();
     $('#dieForm').innerHTML = di ? '<div class="field span2"><label>Название</label><input type="text" id="dieName" value="' + esc(di.name) + '"></div>' +
+      (di.type === 'custom' ? '<div class="field span2 muted small">По чертежу DXF · ' + esc(di.group || '') + (di.note ? ' · ' + esc(di.note) : '') +
+        ' · глубина ручья ' + fmt(di.vDepth, 1) + ' мм</div>' : '') +
       DIE_F.map(f => stepper('die', f[0], di[f[0]], f[2], f[3], f[4], f[1])).join('') : '<p class="muted">Нет матриц</p>';
     lockIfCatalog('#dieForm', isCat(ST.ui.editDie));
     $('#dieDel').hidden = isCat(ST.ui.editDie);
@@ -1009,16 +1010,38 @@
     renderDieView();
   }
 
+  function dieThumb(di) {
+    const ds = G.dieShape(di, 0);
+    return '<svg class="thumb" viewBox="' + SV.viewBox(G.bounds(ds.poly), 4) + '">' + SV.path(ds.poly, 'm-die') + '</svg>';
+  }
+
+  // Список матриц: поиск + сворачиваемые группы каталога (как у пуансонов)
+  function renderDieSide() {
+    const item = x => '<button type="button" class="side-item' + (x.id === ST.ui.editDie ? ' on' : '') + '" data-pick-die="' + x.id + '">' +
+      dieThumb(x) + '<span><b>' + esc(x.name) + '</b><span class="muted small">V' + fmt(x.V, 1) + ' · ' + fmt(x.angle, 0) + '° · R' + fmt(x.r, 1) + ' · H' + fmt(x.H, 0) + '</span></span></button>';
+    const q = (ST.ui.dieQ || '').trim().toLowerCase();
+    const match = x => !q || q.split(/\s+/).every(w => (x.name + ' ' + (x.group || '') + ' v' + x.V + ' ' + x.angle + '° r' + x.r).toLowerCase().indexOf(w) >= 0);
+    const groups = catGroups(CAT.dies, byV).map(g => [g[0], g[1].filter(match)]).filter(g => g[1].length);
+    const mine = ST.dies.filter(match);
+    $('#dieList').innerHTML =
+      groups.map(g => '<details class="cat-grp"' + (q || g[1].some(x => x.id === ST.ui.editDie) ? ' open' : '') + '><summary>' + esc(g[0]) +
+        ' <span class="muted">' + g[1].length + '</span></summary>' + g[1].map(item).join('') + '</details>').join('') +
+      (q && !groups.length && !mine.length ? '<p class="muted small">Ничего не найдено.</p>' : '') +
+      '<div class="side-h">Мои матрицы</div>' +
+      (mine.length ? mine.map(item).join('') : '<p class="muted small">' + (q ? 'Нет совпадений.' : 'Пусто. Выберите позицию каталога и нажмите «+ Копия».') + '</p>');
+  }
+
   function renderDieView() {
     if (ST.ui.tab !== 'dies') return;
     const di = findDie(ST.ui.editDie);
     if (!di) return;
     const ds = G.dieShape(di, 0);
+    const bb = G.bounds(ds.poly);
     const fs = Math.max(ds.W, di.H) / 14;
     let h = SV.path(ds.poly, 'm-die');
     h += SV.dim({ x: -di.V / 2, y: ds.top }, { x: di.V / 2, y: ds.top }, fs * 1.2, 'V ' + fmt(di.V, 1), fs);
-    h += SV.dim({ x: -ds.W / 2, y: 0 }, { x: ds.W / 2, y: 0 }, -fs * 1.4, fmt(ds.W, 1), fs);
-    h += SV.dim({ x: ds.W / 2, y: 0 }, { x: ds.W / 2, y: ds.top }, -fs * 1.4, 'H ' + fmt(di.H, 1), fs);
+    h += SV.dim({ x: bb.x0, y: 0 }, { x: bb.x1, y: 0 }, -fs * 1.4, fmt(ds.W, 1), fs);
+    h += SV.dim({ x: bb.x1, y: 0 }, { x: bb.x1, y: ds.top }, -fs * 1.4, 'H ' + fmt(di.H, 1), fs);
     h += SV.text({ x: 0, y: ds.top - ds.vDepth - fs * 0.9 }, fmt(di.angle, 0) + '°', fs * 0.9, 'lbl');
     h += SV.text({ x: di.V / 2 + fs * 2.2, y: ds.top + fs * 0.6 }, 'R' + fmt(di.r, 2), fs * 0.75, 'lbl');
     const b = G.bounds(ds.poly);
@@ -1031,11 +1054,18 @@
     const root = $('#tab-dies');
     root.addEventListener('click', e => {
       const t = e.target;
-      if (t.dataset.pickDie) { ST.ui.editDie = t.dataset.pickDie; saveAll(); renderDiesTab(); return; }
+      const pk = t.closest('[data-pick-die]');
+      if (pk) {
+        ST.ui.editDie = pk.dataset.pickDie;
+        ST.part.dieId = pk.dataset.pickDie; ST.part.order = null;   // эта же матрица берётся в симуляцию
+        saveAll(); renderDiesTab(); return;
+      }
       switch (t.id) {
         case 'dieNew': {
           const src = findDie(ST.ui.editDie) || CAT.dies[0];
           const n = Object.assign(clone(src), { id: uid('d_'), name: src.name + (isCat(src.id) ? ' (моя)' : ' (копия)') });
+          // своя копия — параметрическая: V, угол, R, H, W можно менять
+          if (n.type === 'custom') { delete n.type; delete n.outline; delete n.vDepth; delete n.note; delete n.group; }
           ST.dies.push(n); ST.ui.editDie = n.id; break;
         }
         case 'dieDel':
@@ -1057,9 +1087,10 @@
       saveAll(); renderDiesTab();
     });
     root.addEventListener('input', e => {
+      if (e.target.id === 'dieSearch') { ST.ui.dieQ = e.target.value; renderDieSide(); return; }
       if (e.target.id !== 'dieName') return;
       const o = target('die');
-      if (o) { o.name = e.target.value; saveAll(); const b = $('#dieList .on'); if (b) b.textContent = o.name; }
+      if (o) { o.name = e.target.value; saveAll(); const b = $('#dieList .on b'); if (b) b.textContent = o.name; }
     });
     $('#importFile').addEventListener('change', e => {
       const file = e.target.files[0];

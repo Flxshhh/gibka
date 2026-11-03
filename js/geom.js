@@ -262,6 +262,13 @@
 
   // Контур матрицы: низ на baseY, верх на baseY+H, ось V по x=0.
   G.dieShape = function (dd, baseY) {
+    if (dd.type === 'custom' && dd.outline) {
+      // Матрица из каталога: точный контур, низ y = 0, ось ручья x = 0
+      const poly = dd.outline.map(p => ({ x: p[0], y: p[1] + baseY }));
+      const top = baseY + dd.H, rd = Math.max(0.1, dd.r), a = G.deg(Math.max(20, Math.min(170, dd.angle))) / 2;
+      const b = G.bounds(poly);
+      return { poly, top, vDepth: dd.vDepth || dd.V / 2, shoulder: { x: dd.V / 2, y: top - rd }, rd, a, W: b.x1 - b.x0, custom: true };
+    }
     const top = baseY + dd.H;
     const a = G.deg(Math.max(20, Math.min(170, dd.angle))) / 2;
     const rd = Math.max(0.1, dd.r);

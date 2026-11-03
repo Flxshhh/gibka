@@ -33,11 +33,6 @@ LG.CATALOG = {
     { id: 'cat_pk_116_90_r08', name: 'PK.116-90-R08', group: 'wirken · Короткие PK / DK', type: 'straight', H: 116, Hb: 86, angle: 90, r: 0.8, W: 26, T: 16.5, t: 9, L: 835 },
     { id: 'cat_dk_116_90_r08', name: 'DK.116-90-R08', group: 'wirken · Короткие PK / DK', type: 'straight', H: 116, Hb: 86, angle: 90, r: 0.8, W: 26, T: 17.5, t: 9.8, L: 835 }
   ],
-  // Матрицы — пока образцы, заменим позициями каталога
-  dies: [
-    { id: 'cat_v12', name: 'V12 86°', V: 12, angle: 86, r: 1.0, H: 60, W: 36 },
-    { id: 'cat_v16', name: 'V16 86°', V: 16, angle: 86, r: 1.5, H: 60, W: 40 },
-    { id: 'cat_v25', name: 'V25 86°', V: 25, angle: 86, r: 2.5, H: 70, W: 55 },
-    { id: 'cat_v40', name: 'V40 86°', V: 40, angle: 86, r: 3.5, H: 80, W: 80 }
-  ]
+  // Матрицы — точные контуры из DXF, см. catalog-dies.js
+  dies: []
 };
