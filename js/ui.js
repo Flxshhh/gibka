@@ -22,7 +22,7 @@
     machine: Object.assign(clone(LG.DEFAULT_MACHINE), load('machine', {})),
     parts: load('parts', []),
     part: Object.assign(clone(LG.DEFAULT_PART), load('part', {})),
-    ui: Object.assign({ tab: 'part', pview: 'draw', segMode: 'straight', segAngle: 45, segLen: 20, editPunch: null, editDie: null }, load('ui', {}))
+    ui: Object.assign({ tab: 'part', pview: 'draw', segMode: 'straight', segAngle: 45, segLen: 20, editPunch: null, editDie: null }, load('ui', {}), { punchQ: '', dieQ: '' })
   };
   // Пуансоны старого формата (до схемы WIRKEN) заменяем стандартными
   ST.punches = ST.punches.filter(p => p.Hb > 0 && p.W > 0);
@@ -275,7 +275,9 @@
       punchThumb(x) + '<span><b>' + esc(x.name) + '</b><span class="muted small">' + punchKind(x) + ' · A' + fmt(x.H, 1) + ' · H' + fmt(x.Hb, 1) + (x.angle ? ' · ' + fmt(x.angle, 1) + '°' : '') + ' · R' + fmt(x.r, 2) + '</span></span></button>';
     // Поиск по названию, группе и типу; группы каталога сворачиваются (открыта та, где выбранный, или все при поиске)
     const q = (ST.ui.punchQ || '').trim().toLowerCase();
-    const match = x => !q || q.split(/\s+/).every(w => (x.name + ' ' + (x.group || '') + ' ' + punchKind(x) + ' ' + (x.angle ? Math.round(x.angle) + '°' : '')).toLowerCase().indexOf(w) >= 0);
+    const norm = t => t.toLowerCase().replace(/[.\-_]/g, '');
+    const match = x => !q || q.split(/\s+/).every(w => { const hay = (x.name + ' ' + (x.group || '') + ' ' + punchKind(x) + ' ' + (x.angle ? Math.round(x.angle) + '°' : '')).toLowerCase();
+      return hay.indexOf(w) >= 0 || norm(hay).indexOf(norm(w)) >= 0; });
     const groups = catGroups(CAT.punches).map(g => [g[0], g[1].filter(match)]).filter(g => g[1].length);
     const mine = ST.punches.filter(match);
     $('#punchSide').innerHTML =
@@ -1047,7 +1049,9 @@
     const item = x => '<button type="button" class="side-item' + (x.id === ST.ui.editDie ? ' on' : '') + '" data-pick-die="' + x.id + '">' +
       dieThumb(x) + '<span><b>' + esc(x.name) + '</b><span class="muted small">V' + fmt(x.V, 1) + ' · ' + fmt(x.angle, 0) + '° · R' + fmt(x.r, 1) + ' · H' + fmt(x.H, 0) + (x.group ? ' · ' + esc(x.group) : '') + '</span></span></button>';
     const q = (ST.ui.dieQ || '').trim().toLowerCase();
-    const match = x => !q || q.split(/\s+/).every(w => (x.name + ' ' + (x.group || '') + ' v' + x.V + ' ' + x.angle + '° r' + x.r).toLowerCase().indexOf(w) >= 0);
+    const norm = t => t.toLowerCase().replace(/[.\-_]/g, '');   // «M460» находит «M.460», «t80 10» — «T80.10.85»
+    const match = x => !q || q.split(/\s+/).every(w => { const hay = (x.name + ' ' + (x.group || '') + ' v' + x.V + ' ' + x.angle + '° r' + x.r).toLowerCase();
+      return hay.indexOf(w) >= 0 || norm(hay).indexOf(norm(w)) >= 0; });
     const groups = catGroups(CAT.dies, byV).map(g => [g[0], g[1].filter(match)]).filter(g => g[1].length);
     const mine = ST.dies.filter(match);
     $('#dieList').innerHTML =
@@ -1076,8 +1080,9 @@
     const fs = Math.max(ds.W, di.H) / 14;
     let h = SV.path(ds.poly, 'm-die');
     h += SV.dim({ x: -di.V / 2, y: ds.top }, { x: di.V / 2, y: ds.top }, fs * 1.2, 'V ' + fmt(di.V, 1), fs);
-    h += SV.dim({ x: bb.x0, y: 0 }, { x: bb.x1, y: 0 }, -fs * 1.4, fmt(ds.W, 1), fs);
-    h += SV.dim({ x: bb.x1, y: 0 }, { x: bb.x1, y: ds.top }, -fs * 1.4, 'H ' + fmt(di.H, 1), fs);
+    const faces = (di.others || []).some(o => o.pts), go = faces ? 3.6 : 1.4;   // есть ручьи по бокам — общие размеры выносим дальше
+    h += SV.dim({ x: bb.x0, y: 0 }, { x: bb.x1, y: 0 }, -fs * go, fmt(ds.W, 1), fs);
+    h += SV.dim({ x: bb.x1, y: 0 }, { x: bb.x1, y: ds.top }, -fs * go, 'H ' + fmt(di.H, 1), fs);
     h += SV.text({ x: 0, y: ds.top - ds.vDepth - fs * 0.9 }, fmt(di.angle, 0) + '°', fs * 0.9, 'lbl');
     h += SV.text({ x: di.V / 2 + fs * 2.2, y: ds.top + fs * 0.6 }, 'R' + fmt(di.r, 2), fs * 0.75, 'lbl');
     // остальные ручьи на этой же грани — тоже с размерами
@@ -1085,8 +1090,16 @@
       h += SV.dim({ x: o.dx - o.V / 2, y: ds.top }, { x: o.dx + o.V / 2, y: ds.top }, fs * 1.2, 'V ' + fmt(o.V, 1), fs);
       h += SV.text({ x: o.dx, y: ds.top - o.depth - fs * 0.9 }, fmt(o.angle, 0) + '°', fs * 0.9, 'lbl');
     });
+    // ручьи на боковых и нижней гранях: размер вдоль грани, угол — внутри у дна
+    (di.others || []).filter(o => o.pts).forEach(o => {
+      let [a, b, c] = o.pts.map(p => ({ x: p[0], y: p[1] }));
+      const m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      if (-(b.y - a.y) * (m.x - c.x) + (b.x - a.x) * (m.y - c.y) < 0) [a, b] = [b, a];   // выносная линия — наружу от ручья
+      h += SV.dim(a, b, fs * 1.2, 'V ' + fmt(o.V, 1), fs);
+      h += SV.text({ x: c.x + (m.x - c.x) * 0.45, y: c.y + (m.y - c.y) * 0.45 - fs * 0.3 }, fmt(o.angle, 0) + '°', fs * 0.9, 'lbl');   // угол — в просвете ручья
+    });
     const b = G.bounds(ds.poly);
-    b.x0 -= fs * 2; b.x1 += fs * 3.5; b.y0 -= fs * 3; b.y1 += fs * 3.5;
+    b.x0 -= fs * 3.5; b.x1 += fs * (faces ? 5.5 : 3.5); b.y0 -= fs * (faces ? 5.5 : 3.5); b.y1 += fs * 3.5;
     $('#dieSvg').setAttribute('viewBox', SV.viewBox(b, 0));
     $('#dieSvg').innerHTML = h;
   }
