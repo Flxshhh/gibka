@@ -125,8 +125,9 @@
     const opts = C.vOptions(S);
     let die, V, sug;
     if (p.dieId === 'auto' || !findDie(p.dieId)) {
-      if (p.V && !opts.some(o => o.V === p.V)) p.V = null;
-      V = p.V || C.recommendedV(S);
+      // всегда среднее значение строки таблицы (S=0.8 → 70 кН/м → V6); старое ручное V больше не действует
+      p.V = null;
+      V = C.recommendedV(S);
       sug = suggestDies(S, V, p);
       // авто: реальная матрица из каталога с V по таблице; если ни одна не подходит — условная
       const best = sug.list.find(d => Math.abs(d.V - V) < 0.3) || sug.list[0];
@@ -142,7 +143,7 @@
     const force = C.forcePerM(S, V, p.material);
     const an = C.analyze(p, { S, Ri, K, V, dieAngle: die.angle, punchAngle: punch && punch.angle });
     const fullKN = force.F * (+p.L || 0) / 1000;
-    if (!sug) sug = suggestDies(S, p.V || C.recommendedV(S), p);
+    if (!sug) sug = suggestDies(S, C.recommendedV(S), p);
     return { S, punch, die, V, opts, riTable, Ri, K, force, fullKN, ton: fullKN / 9.81, an, sug,
       B90: C.byV(V, LG.TABLE.B), auto: p.dieId === 'auto' || !findDie(p.dieId) };
   }
@@ -768,12 +769,9 @@
 
   function renderSimTab() {
     const p = ST.part, r = resolve();
-    const vSel = r.auto
-      ? '<div class="field"><label>Раскрытие V (по таблице для S=' + fmt(r.S, 2) + ')</label><select id="vSel">' +
-        '<option value="">Среднее — V' + C.recommendedV(r.S) + '</option>' +
-        r.opts.map(o => '<option value="' + o.V + '"' + (p.V === o.V ? ' selected' : '') + '>V' + o.V + ' · ' + fmt(o.F, 0) + ' кН/м</option>').join('') +
-        '</select></div>'
-      : '';
+    const mid = r.opts[Math.round((r.opts.length - 1) / 2)];
+    const vSel = '<div class="field"><label>Раскрытие V по таблице</label><div class="vinfo">S=' + fmt(r.S, 2) + ' → среднее <b>' + fmt(mid.F, 0) +
+      ' кН/м</b> → <b>V' + mid.V + '</b>' + (!r.auto && Math.abs(r.V - mid.V) > 0.3 ? ' <span class="warn">(выбрана матрица V' + fmt(r.V, 1) + ')</span>' : '') + '</div></div>';
     $('#toolForm').innerHTML =
       picker('punch', 'Пуансон', r.punch ? punchThumb(r.punch) + '<span><b>' + esc(r.punch.name) + '</b><span class="muted small">' + punchKind(r.punch) + ' · A' + fmt(r.punch.H, 1) +
         (r.punch.angle ? ' · ' + fmt(r.punch.angle, 0) + '°' : '') + '</span></span>' : '—') +
