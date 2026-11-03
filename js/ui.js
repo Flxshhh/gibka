@@ -270,22 +270,61 @@
       .map(k => [k === 999 ? 'Без угла (особая кромка)' : k + '°', map[k].slice().sort(cmp || byKind)]);
   }
 
-  function renderPunchSide() {
-    const item = x => '<button type="button" class="side-item' + (x.id === ST.ui.editPunch ? ' on' : '') + '" data-pick-punch="' + x.id + '">' +
+  // Списки каталога (вкладки и симуляция): поиск, папки углов, у матриц — вложенные папки V.
+  // o: { q — поиск, sel — выбранный id, attr — data-атрибут пунктов, open — Set открытых вручную папок, kp — префикс ключей }
+  const normQ = t => t.toLowerCase().replace(/[.\-_]/g, '');   // «M460» находит «M.460», «top205» — «TOP.205»
+  function matcher(q, hayOf) {
+    q = (q || '').trim().toLowerCase();
+    return x => !q || q.split(/\s+/).every(w => { const hay = hayOf(x).toLowerCase(); return hay.indexOf(w) >= 0 || normQ(hay).indexOf(normQ(w)) >= 0; });
+  }
+  function folder(key, title, n, open, inner, sub) {
+    return '<details class="cat-grp' + (sub ? ' sub' : '') + '" data-key="' + esc(key) + '"' + (open ? ' open' : '') + '><summary>' + esc(title) +
+      ' <span class="muted">' + n + '</span></summary>' + inner + '</details>';
+  }
+  function punchListHTML(o) {
+    const item = x => '<button type="button" class="side-item' + (x.id === o.sel ? ' on' : '') + '" ' + o.attr + '="' + x.id + '">' +
       punchThumb(x) + '<span><b>' + esc(x.name) + '</b><span class="muted small">' + punchKind(x) + ' · A' + fmt(x.H, 1) + ' · H' + fmt(x.Hb, 1) + (x.angle ? ' · ' + fmt(x.angle, 1) + '°' : '') + ' · R' + fmt(x.r, 2) + '</span></span></button>';
-    // Поиск по названию, группе и типу; группы каталога сворачиваются (открыта та, где выбранный, или все при поиске)
-    const q = (ST.ui.punchQ || '').trim().toLowerCase();
-    const norm = t => t.toLowerCase().replace(/[.\-_]/g, '');
-    const match = x => !q || q.split(/\s+/).every(w => { const hay = (x.name + ' ' + (x.group || '') + ' ' + punchKind(x) + ' ' + (x.angle ? Math.round(x.angle) + '°' : '')).toLowerCase();
-      return hay.indexOf(w) >= 0 || norm(hay).indexOf(norm(w)) >= 0; });
+    const q = (o.q || '').trim();
+    const match = matcher(q, x => x.name + ' ' + (x.group || '') + ' ' + punchKind(x) + ' ' + (x.angle ? Math.round(x.angle) + '°' : ''));
     const groups = catGroups(CAT.punches).map(g => [g[0], g[1].filter(match)]).filter(g => g[1].length);
     const mine = ST.punches.filter(match);
-    $('#punchSide').innerHTML =
-      groups.map(g => '<details class="cat-grp"' + (q || g[1].some(x => x.id === ST.ui.editPunch) ? ' open' : '') + '><summary>' + esc(g[0]) +
-        ' <span class="muted">' + g[1].length + '</span></summary>' + g[1].map(item).join('') + '</details>').join('') +
+    const isOpen = (k, list) => q || o.open.has(o.kp + k) || list.some(x => x.id === o.sel);
+    return groups.map(g => folder(o.kp + g[0], g[0], g[1].length, isOpen(g[0], g[1]), g[1].map(item).join(''))).join('') +
       (q && !groups.length && !mine.length ? '<p class="muted small">Ничего не найдено.</p>' : '') +
       '<div class="side-h">Мои пуансоны</div>' +
       (mine.length ? mine.map(item).join('') : '<p class="muted small">' + (q ? 'Нет совпадений.' : 'Пусто. Выберите позицию каталога и нажмите «+ Копия», чтобы сделать свою.') + '</p>');
+  }
+  function dieListHTML(o) {
+    const item = x => '<button type="button" class="side-item' + (x.id === o.sel ? ' on' : '') + '" ' + o.attr + '="' + x.id + '">' +
+      dieThumb(x) + '<span><b>' + esc(x.name) + '</b><span class="muted small">V' + fmt(x.V, 1) + ' · ' + fmt(x.angle, 0) + '° · R' + fmt(x.r, 1) + ' · H' + fmt(x.H, 0) + (x.group ? ' · ' + esc(x.group) : '') + '</span></span></button>';
+    const q = (o.q || '').trim();
+    const match = matcher(q, x => x.name + ' ' + (x.group || '') + ' v' + x.V + ' ' + x.angle + '° r' + x.r);
+    const groups = catGroups(CAT.dies, byV).map(g => [g[0], g[1].filter(match)]).filter(g => g[1].length);
+    const mine = ST.dies.filter(match);
+    const isOpen = (k, list) => q || o.open.has(o.kp + k) || list.some(x => x.id === o.sel);
+    return groups.map(g => {
+        // внутри папки угла — вложенные папки по ширине ручья V
+        const vs = [];
+        g[1].forEach(x => { const v = fmt(x.V, 1); let b = vs.find(z => z[0] === v); if (!b) vs.push(b = [v, []]); b[1].push(x); });
+        return folder(o.kp + g[0], g[0], g[1].length, isOpen(g[0], g[1]),
+          vs.map(v => folder(o.kp + g[0] + '|' + v[0], 'V' + v[0], v[1].length, isOpen(g[0] + '|' + v[0], v[1]), v[1].map(item).join(''), true)).join(''));
+      }).join('') +
+      (q && !groups.length && !mine.length ? '<p class="muted small">Ничего не найдено.</p>' : '') +
+      '<div class="side-h">Мои матрицы</div>' +
+      (mine.length ? mine.map(item).join('') : '<p class="muted small">' + (q ? 'Нет совпадений.' : 'Пусто. Выберите позицию каталога и нажмите «+ Копия».') + '</p>');
+  }
+  // какие папки открыл/закрыл сам пользователь — остаются такими после перерисовки (ключи с префиксом списка)
+  const openSet = new Set();
+  function trackFolders(box) {
+    box.addEventListener('click', e => {
+      const sm = e.target.closest('summary'); if (!sm) return;
+      const d = sm.parentElement, k = d.dataset.key; if (!k) return;
+      setTimeout(() => { if (d.open) openSet.add(k); else openSet.delete(k); }, 0);
+    });
+  }
+
+  function renderPunchSide() {
+    $('#punchSide').innerHTML = punchListHTML({ q: ST.ui.punchQ, sel: ST.ui.editPunch, attr: 'data-pick-punch', open: openSet, kp: 'p:' });
   }
 
   function punchMass(pu, ps) {
@@ -361,6 +400,7 @@
 
   function bindPunchTab() {
     const root = $('#tab-punch');
+    trackFolders($('#punchSide'));
     root.addEventListener('click', e => {
       const pick = e.target.closest('[data-pick-punch]');
       if (pick) {
@@ -678,6 +718,23 @@
   const optGroups = (groups, sel) => groups.filter(g => g[1].length).map(g => '<optgroup label="' + g[0] + '">' +
     g[1].map(x => '<option value="' + x.id + '"' + (x.id === sel ? ' selected' : '') + '>' + esc(x.name) + '</option>').join('') + '</optgroup>').join('');
 
+  // Раскрывающийся список (как на вкладках): кнопка с текущим выбором → панель с поиском и папками
+  const simPick = { open: null, q: { punch: '', die: '' } };
+  function picker(kind, label, cur) {
+    return '<div class="field span2 picker" data-picker="' + kind + '"><label>' + label + '</label>' +
+      '<button type="button" class="side-item picker-btn" data-picker-btn="' + kind + '">' + cur + '<span class="picker-arr">▾</span></button>' +
+      '<div class="picker-pop"' + (simPick.open === kind ? '' : ' hidden') + '>' +
+      '<input type="search" class="side-search" data-picker-q="' + kind + '" placeholder="' + (kind === 'punch' ? 'Поиск: TOP.205, 88, гусак…' : 'Поиск: V12, 88, T80…') + '" value="' + esc(simPick.q[kind]) + '">' +
+      '<div class="side-list picker-list">' + (simPick.open === kind ? pickerList(kind) : '') + '</div></div></div>';
+  }
+  function pickerList(kind) {
+    const p = ST.part;
+    if (kind === 'punch') return punchListHTML({ q: simPick.q.punch, sel: (resolve().punch || {}).id, attr: 'data-sim-punch', open: openSet, kp: 'sp:' });
+    return '<button type="button" class="side-item' + (p.dieId === 'auto' || !findDie(p.dieId) ? ' on' : '') + '" data-sim-die="auto"><span><b>Авто по таблице</b>' +
+      '<span class="muted small">V подбирается по толщине листа</span></span></button>' +
+      dieListHTML({ q: simPick.q.die, sel: p.dieId, attr: 'data-sim-die', open: openSet, kp: 'sd:' });
+  }
+
   function renderSimTab() {
     const p = ST.part, r = resolve();
     const vSel = r.auto
@@ -687,13 +744,13 @@
         '</select></div>'
       : '';
     $('#toolForm').innerHTML =
-      '<div class="field"><label>Пуансон</label><select id="punchSel">' +
-      optGroups(catGroups(CAT.punches).map(g => ['Каталог · ' + g[0], g[1]]).concat([['Мои', ST.punches]]), r.punch && r.punch.id) + '</select></div>' +
+      picker('punch', 'Пуансон', r.punch ? punchThumb(r.punch) + '<span><b>' + esc(r.punch.name) + '</b><span class="muted small">' + punchKind(r.punch) + ' · A' + fmt(r.punch.H, 1) +
+        (r.punch.angle ? ' · ' + fmt(r.punch.angle, 0) + '°' : '') + '</span></span>' : '—') +
       '<div class="field"><label>Выемка пуансона (гусак)</label><select id="mirSel">' +
       '<option value="0"' + (!p.punchMirror ? ' selected' : '') + '>к оператору</option>' +
       '<option value="1"' + (p.punchMirror ? ' selected' : '') + '>к упору</option></select></div>' +
-      '<div class="field"><label>Матрица</label><select id="dieSel"><option value="auto">Авто по таблице</option>' +
-      optGroups(catGroups(CAT.dies, byV).map(g => ['Каталог · ' + g[0], g[1]]).concat([['Мои', ST.dies]]), p.dieId) + '</select></div>' +
+      picker('die', 'Матрица', r.auto ? '<span><b>Авто по таблице</b><span class="muted small">V' + fmt(r.V, 1) + ' · ' + fmt(r.die.angle, 0) + '°</span></span>'
+        : dieThumb(r.die) + '<span><b>' + esc(r.die.name) + '</b><span class="muted small">V' + fmt(r.die.V, 1) + ' · ' + fmt(r.die.angle, 0) + '° · H' + fmt(r.die.H, 0) + '</span></span>') +
       vSel +
       stepper('part', 'riOverride', p.riOverride || 0, 0.1, 0, 2, 'Ri вручную, мм (0 — авто)') +
       stepper('part', 'kOverride', p.kOverride || 0, 0.01, 0, 2, 'K-фактор вручную (0 — авто)');
@@ -776,15 +833,40 @@
     const root = $('#tab-sim');
     root.addEventListener('change', e => {
       const id = e.target.id, p = ST.part;
-      if (id === 'punchSel') p.punchId = e.target.value;
-      else if (id === 'mirSel') p.punchMirror = e.target.value === '1';
-      else if (id === 'dieSel') p.dieId = e.target.value;
+      if (id === 'mirSel') p.punchMirror = e.target.value === '1';
       else if (id === 'vSel') p.V = e.target.value ? +e.target.value : null;
       else return;
       saveAll(); renderSimTab();
     });
+    trackFolders($('#toolForm'));
+    root.addEventListener('input', e => {
+      const k = e.target.dataset.pickerQ; if (!k) return;
+      simPick.q[k] = e.target.value;
+      e.target.parentElement.querySelector('.picker-list').innerHTML = pickerList(k);
+    });
+    // клик мимо открытой панели — закрыть её
+    document.addEventListener('click', e => {
+      if (simPick.open && !e.target.closest('.picker')) { simPick.open = null; $$('.picker-pop').forEach(x => { x.hidden = true; }); }
+    });
     root.addEventListener('click', e => {
       const p = ST.part;
+      const pb = e.target.closest('[data-picker-btn]');
+      if (pb) {
+        const k = pb.dataset.pickerBtn;
+        simPick.open = simPick.open === k ? null : k;
+        $$('.picker').forEach(box => {
+          const on = box.dataset.picker === simPick.open, pop = box.querySelector('.picker-pop');
+          pop.hidden = !on;
+          if (on) { box.querySelector('.picker-list').innerHTML = pickerList(k); const sel = pop.querySelector('.side-item.on'); if (sel) sel.scrollIntoView({ block: 'nearest' }); }
+        });
+        return;
+      }
+      const sp = e.target.closest('[data-sim-punch]'), sd = e.target.closest('[data-sim-die]');
+      if (sp || sd) {
+        if (sp) p.punchId = sp.dataset.simPunch; else p.dieId = sd.dataset.simDie;
+        p.order = null; simPick.open = null;
+        saveAll(); renderSimTab(); return;
+      }
       if (e.target.id === 'orderAuto') { p.order = null; saveAll(); renderSimOutputs(); return; }
       const alt = e.target.closest('[data-alt]');
       if (alt) {
@@ -1044,31 +1126,8 @@
   }
 
   // Список матриц: поиск + сворачиваемые группы каталога (как у пуансонов)
-  const dieOpen = new Set();   // какие папки открыты вручную — остаются открытыми после перерисовки
   function renderDieSide() {
-    const item = x => '<button type="button" class="side-item' + (x.id === ST.ui.editDie ? ' on' : '') + '" data-pick-die="' + x.id + '">' +
-      dieThumb(x) + '<span><b>' + esc(x.name) + '</b><span class="muted small">V' + fmt(x.V, 1) + ' · ' + fmt(x.angle, 0) + '° · R' + fmt(x.r, 1) + ' · H' + fmt(x.H, 0) + (x.group ? ' · ' + esc(x.group) : '') + '</span></span></button>';
-    const q = (ST.ui.dieQ || '').trim().toLowerCase();
-    const norm = t => t.toLowerCase().replace(/[.\-_]/g, '');   // «M460» находит «M.460», «t80 10» — «T80.10.85»
-    const match = x => !q || q.split(/\s+/).every(w => { const hay = (x.name + ' ' + (x.group || '') + ' v' + x.V + ' ' + x.angle + '° r' + x.r).toLowerCase();
-      return hay.indexOf(w) >= 0 || norm(hay).indexOf(norm(w)) >= 0; });
-    const groups = catGroups(CAT.dies, byV).map(g => [g[0], g[1].filter(match)]).filter(g => g[1].length);
-    const mine = ST.dies.filter(match);
-    $('#dieList').innerHTML =
-      groups.map(g => {
-        // внутри папки угла — вложенные папки по ширине ручья V
-        const vs = [];
-        g[1].forEach(x => { const v = fmt(x.V, 1); let b = vs.find(z => z[0] === v); if (!b) vs.push(b = [v, []]); b[1].push(x); });
-        const isOpen = (key, list) => q || dieOpen.has(key) || list.some(x => x.id === ST.ui.editDie);
-        return '<details class="cat-grp" data-key="' + esc(g[0]) + '"' + (isOpen(g[0], g[1]) ? ' open' : '') + '><summary>' + esc(g[0]) +
-          ' <span class="muted">' + g[1].length + '</span></summary>' +
-          vs.map(v => '<details class="cat-grp sub" data-key="' + esc(g[0] + '|' + v[0]) + '"' + (isOpen(g[0] + '|' + v[0], v[1]) ? ' open' : '') +
-            '><summary>V' + v[0] + ' <span class="muted">' + v[1].length + '</span></summary>' + v[1].map(item).join('') + '</details>').join('') +
-          '</details>';
-      }).join('') +
-      (q && !groups.length && !mine.length ? '<p class="muted small">Ничего не найдено.</p>' : '') +
-      '<div class="side-h">Мои матрицы</div>' +
-      (mine.length ? mine.map(item).join('') : '<p class="muted small">' + (q ? 'Нет совпадений.' : 'Пусто. Выберите позицию каталога и нажмите «+ Копия».') + '</p>');
+    $('#dieList').innerHTML = dieListHTML({ q: ST.ui.dieQ, sel: ST.ui.editDie, attr: 'data-pick-die', open: openSet, kp: 'd:' });
   }
 
   function renderDieView() {
@@ -1157,12 +1216,7 @@
       }
       saveAll(); renderDiesTab();
     });
-    // запоминаем только то, что открыл/закрыл сам пользователь
-    $('#dieList').addEventListener('click', e => {
-      const sm = e.target.closest('summary'); if (!sm || (ST.ui.dieQ || '').trim()) return;
-      const d = sm.parentElement, k = d.dataset.key;
-      setTimeout(() => { if (d.open) dieOpen.add(k); else dieOpen.delete(k); }, 0);
-    });
+    trackFolders($('#dieList'));
     root.addEventListener('input', e => {
       if (e.target.id === 'dieSearch') { ST.ui.dieQ = e.target.value; renderDieSide(); return; }
       if (e.target.id !== 'dieName') return;

@@ -350,3 +350,11 @@ th, td { border-bottom: 1px solid var(--line); padding: 6px 8px; text-align: lef
 .cat-grp.sub > summary { padding: 6px 10px; font-size: 13px; }
 .side-list { display: grid; gap: 6px; max-height: 70vh; overflow-y: auto; padding-right: 2px; }
 @media (max-width: 860px) { .side-list { grid-auto-flow: row; max-height: 50vh; } }
+
+/* Раскрывающиеся списки пуансона и матрицы в симуляции */
+.picker { position: relative; }
+.picker-btn { width: 100%; }
+.picker-btn .picker-arr { margin-left: auto; color: var(--accent); font-size: 14px; }
+.picker-pop { margin-top: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--paper, var(--card)); display: grid; gap: 6px; }
+.picker-pop[hidden] { display: none; }
+.picker-list { max-height: 55vh; }
