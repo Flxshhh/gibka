@@ -250,22 +250,32 @@
     return '<svg class="thumb" viewBox="' + SV.viewBox(G.bounds(ps.outline), 4) + '">' + SV.path(ps.outline, 'm-punch') + '</svg>';
   }
 
-  // Группы каталога в порядке появления
-  // внутри группы пуансоны — по углу кромки (без угла — в конце), затем по высоте; матрицы — по V, затем по углу
-  const byAngle = (a, b) => ((a.angle || 999) - (b.angle || 999)) || (a.H - b.H) || String(a.name).localeCompare(String(b.name));
-  const byV = (a, b) => (a.V - b.V) || (a.angle - b.angle) || (a.H - b.H) || String(a.name).localeCompare(String(b.name));
+  // Вид пуансона: прямой / гусак / обратный (у позиций из DXF — по группе)
+  const KINDS = ['Прямой', 'Гусак', 'Обратный', 'Свой'];
+  function punchKind(x) {
+    const g = (x.group || '').toLowerCase();
+    if (x.type === 'goose' || g.indexOf('гусак') >= 0) return 'Гусак';
+    if (g.indexOf('обрат') >= 0) return 'Обратный';
+    if (x.type === 'straight' || g.indexOf('прям') >= 0) return 'Прямой';
+    return 'Свой';
+  }
+  // Внутри папки угла: пуансоны — прямые, гусаки, обратные, затем по высоте; матрицы — по V, затем по высоте
+  const byKind = (a, b) => (KINDS.indexOf(punchKind(a)) - KINDS.indexOf(punchKind(b))) || (a.H - b.H) || String(a.name).localeCompare(String(b.name));
+  const byV = (a, b) => (a.V - b.V) || (a.H - b.H) || String(a.name).localeCompare(String(b.name));
+  // Каталог раскладывается по папкам углов (по возрастанию), без угла — в конце
   function catGroups(list, cmp) {
-    const order = [], map = {};
-    list.forEach(x => { const g = x.group || 'Каталог'; if (!map[g]) { map[g] = []; order.push(g); } map[g].push(x); });
-    return order.map(g => [g, map[g].slice().sort(cmp || byAngle)]);
+    const map = {};
+    list.forEach(x => { const k = x.angle ? Math.round(x.angle) : 999; (map[k] = map[k] || []).push(x); });
+    return Object.keys(map).map(Number).sort((a, b) => a - b)
+      .map(k => [k === 999 ? 'Без угла (особая кромка)' : k + '°', map[k].slice().sort(cmp || byKind)]);
   }
 
   function renderPunchSide() {
     const item = x => '<button type="button" class="side-item' + (x.id === ST.ui.editPunch ? ' on' : '') + '" data-pick-punch="' + x.id + '">' +
-      punchThumb(x) + '<span><b>' + esc(x.name) + '</b><span class="muted small">A' + fmt(x.H, 1) + ' · H' + fmt(x.Hb, 1) + (x.angle ? ' · ' + fmt(x.angle, 1) + '°' : '') + ' · R' + fmt(x.r, 2) + '</span></span></button>';
+      punchThumb(x) + '<span><b>' + esc(x.name) + '</b><span class="muted small">' + punchKind(x) + ' · A' + fmt(x.H, 1) + ' · H' + fmt(x.Hb, 1) + (x.angle ? ' · ' + fmt(x.angle, 1) + '°' : '') + ' · R' + fmt(x.r, 2) + '</span></span></button>';
     // Поиск по названию, группе и типу; группы каталога сворачиваются (открыта та, где выбранный, или все при поиске)
     const q = (ST.ui.punchQ || '').trim().toLowerCase();
-    const match = x => !q || q.split(/\s+/).every(w => (x.name + ' ' + (x.group || '') + ' ' + (x.type === 'goose' ? 'гусак' : x.type === 'straight' ? 'прямой' : '')).toLowerCase().indexOf(w) >= 0);
+    const match = x => !q || q.split(/\s+/).every(w => (x.name + ' ' + (x.group || '') + ' ' + punchKind(x) + ' ' + (x.angle ? Math.round(x.angle) + '°' : '')).toLowerCase().indexOf(w) >= 0);
     const groups = catGroups(CAT.punches).map(g => [g[0], g[1].filter(match)]).filter(g => g[1].length);
     const mine = ST.punches.filter(match);
     $('#punchSide').innerHTML =
@@ -1018,7 +1028,7 @@
   // Список матриц: поиск + сворачиваемые группы каталога (как у пуансонов)
   function renderDieSide() {
     const item = x => '<button type="button" class="side-item' + (x.id === ST.ui.editDie ? ' on' : '') + '" data-pick-die="' + x.id + '">' +
-      dieThumb(x) + '<span><b>' + esc(x.name) + '</b><span class="muted small">V' + fmt(x.V, 1) + ' · ' + fmt(x.angle, 0) + '° · R' + fmt(x.r, 1) + ' · H' + fmt(x.H, 0) + '</span></span></button>';
+      dieThumb(x) + '<span><b>' + esc(x.name) + '</b><span class="muted small">V' + fmt(x.V, 1) + ' · ' + fmt(x.angle, 0) + '° · R' + fmt(x.r, 1) + ' · H' + fmt(x.H, 0) + (x.group ? ' · ' + esc(x.group) : '') + '</span></span></button>';
     const q = (ST.ui.dieQ || '').trim().toLowerCase();
     const match = x => !q || q.split(/\s+/).every(w => (x.name + ' ' + (x.group || '') + ' v' + x.V + ' ' + x.angle + '° r' + x.r).toLowerCase().indexOf(w) >= 0);
     const groups = catGroups(CAT.dies, byV).map(g => [g[0], g[1].filter(match)]).filter(g => g[1].length);
