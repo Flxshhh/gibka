@@ -97,8 +97,9 @@
   // Подбор матриц по таблице гибов: V — из таблицы для толщины, угол матрицы не тупее самого острого гиба,
   // самая короткая полка ляжет на плечи (B по таблице), усилие не больше пресса.
   // Порядок: сначала V из таблицы (выбранное или среднее), потом соседние; внутри — угол ближе к нужному, проще матрица.
+  // Берём только одно V — на пересечении толщины и среднего значения строки таблицы (S=0.8 → 70 кН/м → V6, S=1.5 → 120 → V12)
   function suggestDies(S, Vt, part) {
-    const opts = C.vOptions(S);
+    const opts = C.vOptions(S).filter(o => Math.abs(o.V - Vt) < 0.3);
     const an = C.analyze(part, { S, Ri: C.riFor(Vt, part.material), K: 0.4, V: Vt });
     const bends = an.bends.filter(b => b.abs >= 0.5);
     const minIncl = bends.length ? Math.min.apply(null, bends.map(b => b.incl)) : 180;
@@ -106,7 +107,8 @@
     const flangeOk = V => bends.every(b => Math.min(an.segs[b.i].outerLen, an.segs[b.i + 1].outerLen) + 1e-6 >= C.byV(V, LG.TABLE.B) * C.angleCoef(b.incl));
     const tonOk = V => C.forcePerM(S, V, part.material).F * (+part.L || 0) / 1000 / 9.81 <= ST.machine.maxTon;
     const okV = opts.filter(o => flangeOk(o.V) && tonOk(o.V)).map(o => o.V);
-    if (!okV.length) why.push(opts.some(o => flangeOk(o.V)) ? 'усилие больше, чем может пресс' : 'полки короче минимальной B для всех V из таблицы');
+    if (!opts.length) why.push('V' + Vt + ' нет в таблице для S=' + S);
+    else if (!okV.length) why.push(flangeOk(Vt) ? 'усилие на V' + Vt + ' больше, чем может пресс' : 'самая короткая полка меньше минимальной B для V' + Vt);
     const wantA = Math.min(88, minIncl - 2);                   // для 90° — матрица 85–88°
     const vRank = V => okV.indexOf(V) < 0 ? 99 : (Math.abs(V - Vt) < 0.3 ? 0 : 1 + Math.abs(Math.log(V / Vt)));
     const list = allDies().filter(d => okV.some(V => Math.abs(d.V - V) < 0.3) && d.angle <= minIncl + 0.5)
@@ -128,7 +130,7 @@
       sug = suggestDies(S, V, p);
       // авто: реальная матрица из каталога с V по таблице; если ни одна не подходит — условная
       const best = sug.list.find(d => Math.abs(d.V - V) < 0.3) || sug.list[0];
-      die = best || autoDie(V);
+      die = best || autoDie(V);   // в каталоге нет матрицы с этим V — условная, с предупреждением в «Расчёте»
       V = die.V;
     } else {
       die = findDie(p.dieId);
@@ -812,6 +814,7 @@
       '</div>';
     const msgs = r.an.errors.map(e => '<li class="bad">' + esc(e) + '</li>').concat(r.an.warnings.map(w => '<li class="warn">' + esc(w) + '</li>'));
     if (msgs.length) h += '<ul class="msgs">' + msgs.join('') + '</ul>';
+    if (r.auto && r.die.id === 'auto') h += '<div class="small warn">В каталоге нет подходящей матрицы V' + fmt(r.V, 1) + (r.sug.why.length ? ' (' + r.sug.why.join(', ') + ')' : ' с нужным углом') + ' — показана условная.</div>';
     if (!r.auto) h += '<div class="small"><button type="button" class="link" data-sugdie="auto">Вернуть авто по таблице (среднее V' + C.recommendedV(r.S) + ')</button></div>';
     $('#calcOut').innerHTML = h;
   }
@@ -844,7 +847,7 @@
       if (!PLAYER.altsBusy) {
         if (PLAYER.dieAltsBusy) h += '<div class="small muted">Подбираю матрицу по таблице…</div>';
         else if (PLAYER.dieAlts && PLAYER.dieAlts.length) h += '<div class="alts">' + (PLAYER.alts && PLAYER.alts.length ? 'Или оставить пуансон и поменять матрицу' : 'С этим пуансоном получится, если поменять матрицу') +
-          ' <span class="muted">(по таблице, от среднего V' + PLAYER.dieVmid + ')</span>: ' + PLAYER.dieAlts.map(d =>
+          ' <span class="muted">(по таблице, среднее V' + PLAYER.dieVmid + ')</span>: ' + PLAYER.dieAlts.map(d =>
             '<button type="button" class="sm" data-sugdie="' + d.id + '"' + (d.mirror !== !!ST.part.punchMirror ? ' data-mir="' + (d.mirror ? 1 : 0) + '"' : '') + '>' + esc(d.name) + ' · V' + fmt(d.V, 1) + ' · ' + fmt(d.angle, 0) + '°' +
             (d.mirror !== !!ST.part.punchMirror ? ' · выемкой ' + (d.mirror ? 'к упору' : 'к оператору') : '') + '</button>').join(' ') + '</div>';
         else if (auto && !(PLAYER.alts && PLAYER.alts.length)) h += '<div class="small">Сменой матрицы по таблице тоже не получается — нужна другая деталь или порядок гибов вручную.</div>';
@@ -1039,7 +1042,7 @@
   }
 
   // Второй приоритет — матрица. С текущим пуансоном перебираем матрицы по таблице гибов,
-  // начиная со среднего V для этой толщины (диагональ таблицы), затем соседние V.
+  // только среднее V для этой толщины (пересечение строки таблицы со средним значением усилия).
   function findDieAlternatives(r, token) {
     const out = [], t0 = performance.now();
     const Vmid = C.recommendedV(r.S);
