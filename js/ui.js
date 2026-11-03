@@ -254,7 +254,9 @@
   function catGroups(list) {
     const order = [], map = {};
     list.forEach(x => { const g = x.group || 'Каталог'; if (!map[g]) { map[g] = []; order.push(g); } map[g].push(x); });
-    return order.map(g => [g, map[g]]);
+    // внутри группы — по углу кромки (без угла — в конце), затем по высоте
+    const byAngle = (a, b) => ((a.angle || 999) - (b.angle || 999)) || (a.H - b.H) || String(a.name).localeCompare(String(b.name));
+    return order.map(g => [g, map[g].slice().sort(byAngle)]);
   }
 
   function renderPunchSide() {
@@ -348,7 +350,11 @@
     const root = $('#tab-punch');
     root.addEventListener('click', e => {
       const pick = e.target.closest('[data-pick-punch]');
-      if (pick) { ST.ui.editPunch = pick.dataset.pickPunch; saveAll(); renderPunchTab(); return; }
+      if (pick) {
+        ST.ui.editPunch = pick.dataset.pickPunch;
+        ST.part.punchId = pick.dataset.pickPunch; ST.part.order = null;   // этот же пуансон берётся в симуляцию
+        saveAll(); renderPunchTab(); return;
+      }
       const pv = e.target.closest('[data-pview]');
       if (pv) { ST.ui.pview = pv.dataset.pview; saveAll(); renderPunchTab(); return; }
       const t = e.target;
@@ -724,9 +730,13 @@
                            : 'Проверено несколько тысяч вариантов порядка и положения детали — без ударов не нашлось.')
           : 'Это ваш порядок гибов — нажмите «Подобрать авто», чтобы перебрать все варианты.') + '</div>';
       if (PLAYER.alts && PLAYER.alts.length) {
-        h += '<div class="alts">Без ударов получится с инструментом: ' + PLAYER.alts.map((a, i) =>
-          '<button type="button" class="sm" data-alt="' + i + '">' + esc(a.name) + ' · выемка ' + (a.mirror ? 'к упору' : 'к оператору') + '</button>').join(' ') + '</div>';
-      } else if (auto) h += '<div class="small">Ни один пуансон из библиотеки не подходит — нужен другой инструмент или другая деталь.</div>';
+        h += '<div class="alts">Подойдут без удара, например: ' + PLAYER.alts.map((a, i) =>
+          '<button type="button" class="sm" data-alt="' + i + '">' + (a.same ? 'этот же, выемкой ' + (a.mirror ? 'к упору' : 'к оператору')
+            : esc(a.name) + ' · A' + fmt(a.H, 0) + (a.angle ? ' · ' + fmt(a.angle, 0) + '°' : '') + (a.mirror !== !!ST.part.punchMirror ? ' · выемкой ' + (a.mirror ? 'к упору' : 'к оператору') : '')) +
+          '</button>').join(' ') + '</div>';
+      } else if (auto) h += '<div class="small">' + (PLAYER.alts && PLAYER.alts.exhausted
+          ? 'Ни один пуансон из каталога и «Моих» не подходит — нужна другая матрица или другая деталь.'
+          : 'Среди похожих пуансонов подходящего не нашлось. Попробуйте другую матрицу или порядок гибов вручную.') + '</div>';
       h += '</div>';
     }
     h += '<div class="row between"><div>' + (auto
@@ -851,13 +861,23 @@
   }
 
   // Если с текущим инструментом гнуть не получается — пробуем выемку с другой стороны и другие пуансоны
+  // Если с текущим пуансоном удар — ищем 2–3 подходящих: сначала тот же с выемкой в другую сторону,
+  // потом самые похожие по высоте и углу. Перебор ограничен по времени, чтобы страница не подвисала.
   function findAlternatives(r) {
-    const out = [];
-    allPunches().forEach(pu => [false, true].forEach(m => {
-      if (pu.id === r.punch.id && m === !!ST.part.punchMirror) return;
-      const sim = new LG.Sim({ an: r.an, S: r.S, Ri: r.Ri, K: r.K, punch: pu, punchMirror: m, die: r.die, machine: ST.machine });
-      if (sim.plan(null, 600).ok) out.push({ id: pu.id, name: pu.name, mirror: m });
-    }));
+    const cur = r.punch, out = [], t0 = performance.now();
+    const score = pu => Math.abs((pu.H || 0) - (cur.H || 0)) / 40 + ((pu.angle && cur.angle) ? Math.abs(pu.angle - cur.angle) / 15 : 1);
+    const cands = [{ pu: cur, m: !ST.part.punchMirror }].concat(
+      allPunches().filter(pu => pu.id !== cur.id).sort((a, b) => score(a) - score(b))
+        .reduce((acc, pu) => acc.concat([{ pu, m: !!ST.part.punchMirror }, { pu, m: !ST.part.punchMirror }]), []));
+    let tried = 0;
+    for (const c of cands) {
+      if (out.length >= 3 || performance.now() - t0 > 2500) break;
+      if (out.some(o => o.id === c.pu.id)) continue;
+      tried++;
+      const sim = new LG.Sim({ an: r.an, S: r.S, Ri: r.Ri, K: r.K, punch: c.pu, punchMirror: c.m, die: r.die, machine: ST.machine });
+      if (sim.plan(null, 400).ok) out.push({ id: c.pu.id, name: c.pu.name, mirror: c.m, H: c.pu.H, angle: c.pu.angle, same: c.pu.id === cur.id });
+    }
+    out.exhausted = tried >= cands.length;
     return out;
   }
 
