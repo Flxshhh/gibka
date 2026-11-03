@@ -528,7 +528,9 @@
         '<button type="button" class="ghost del" data-del="' + i + '" title="Удалить отрезок">✕</button></div>';
       if (c === i + 1 && c < p.segs.length) h += mark;
     });
-    $('#segList').innerHTML = h;
+    // пока в поле длины печатают — список не перерисовываем, иначе поле теряет фокус после первой цифры
+    const ae = document.activeElement;
+    if (!(ae && ae.tagName === 'INPUT' && $('#segList').contains(ae))) $('#segList').innerHTML = h;
     $('#curInfo').innerHTML = 'Добавлять: <b>' + cursorText() + '</b>' +
       (c < p.segs.length ? ' <button type="button" class="link" data-cur="end">в конец</button>' : '');
   }
