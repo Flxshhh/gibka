@@ -18,16 +18,19 @@
 
   const ST = {
     punches: load('punches', []),   // «Мои» — личные, в браузере; общий каталог — LG.CATALOG
-    dies: load('dies', []),
+    dies: load('dies', []).filter(d => d && d.V > 0 && d.angle > 0 && d.H > 0),
     machine: Object.assign(clone(LG.DEFAULT_MACHINE), load('machine', {})),
     parts: load('parts', []),
     part: Object.assign(clone(LG.DEFAULT_PART), load('part', {})),
     ui: Object.assign({ tab: 'part', pview: 'draw', segMode: 'straight', segAngle: 45, segLen: 20, editPunch: null, editDie: null }, load('ui', {}), { punchQ: '', dieQ: '' })
   };
   // Пуансоны старого формата (до схемы WIRKEN) заменяем стандартными
-  ST.punches = ST.punches.filter(p => p.Hb > 0 && p.W > 0);
+  // (копии позиций из DXF — type 'custom' — хранят готовый контур, их не трогаем)
+  const isOutline = p => p.type === 'custom' && Array.isArray(p.outline) && p.outline.length > 2;
+  ST.punches = ST.punches.filter(p => p && (isOutline(p) || (p.Hb > 0 && p.W > 0)));
   // Толщину носика заменили длиной носика: переносим текущую форму в новый параметр
   ST.punches.forEach(p => {
+    if (isOutline(p)) return;
     if (!(p.t > 0)) p.t = 8;
     if (!(p.tL > 0)) p.tL = p.t / 2;
     p.H = +(p.Hb + G.PUNCH_FIX.TH).toFixed(3);          // хвостовик постоянный: 30 мм
@@ -38,7 +41,7 @@
       p.type = p.T < p.W ? 'goose' : 'straight';
     }
     // Прямой по фото: шея 17 мм (раньше шея была во всю ширину 26)
-    if (p.type === 'straight') { p.W = 26; if (!(p.T < 26)) p.T = 17; }
+    if (p.type === 'straight') { if (!(p.W >= 26)) p.W = 26; if (!(p.T < p.W)) p.T = 17; }
     if (!(p.noseL > 0)) p.noseL = Math.round(G.punchShape(p).noseL);
   });
   // Один раз: сохранённый «Прямой …» (его могли переключить в гусак) делаем прямым по фото
@@ -96,7 +99,7 @@
 
   // Подбор матриц по таблице гибов: V — из таблицы для толщины, угол матрицы не тупее самого острого гиба,
   // самая короткая полка ляжет на плечи (B по таблице), усилие не больше пресса.
-  // Порядок: сначала V из таблицы (выбранное или среднее), потом соседние; внутри — угол ближе к нужному, проще матрица.
+  // Внутри — угол ближе к нужному, матрица попроще.
   // Берём только одно V — на пересечении толщины и среднего значения строки таблицы (S=0.8 → 70 кН/м → V6, S=1.5 → 120 → V12)
   function suggestDies(S, Vt, part) {
     const opts = C.vOptions(S).filter(o => Math.abs(o.V - Vt) < 0.3);
@@ -153,7 +156,7 @@
     return '<div class="field' + (cls ? ' ' + cls : '') + '">' + (label ? '<label>' + label + '</label>' : '') +
       '<div class="stepper" data-obj="' + obj + '" data-key="' + key + '" data-step="' + step + '" data-min="' + min + '" data-dec="' + dec + '">' +
       '<button type="button" data-d="-1" aria-label="меньше">−</button>' +
-      '<input type="number" inputmode="decimal" step="any" value="' + fmt(val, dec) + '">' +
+      '<input type="text" inputmode="decimal" autocomplete="off" value="' + fmt(val, dec) + '">' +
       '<button type="button" data-d="1" aria-label="больше">+</button></div></div>';
   }
 
@@ -189,19 +192,21 @@
       }
       renderPunchView(); renderPunchSide();
     }
-    else if (obj === 'die' || obj === 'machine') renderDieView();
+    else if (obj === 'die') { renderDieView(); renderDieSide(); }
+    else if (obj === 'machine') renderDieView();
     else if (obj === 'part' || obj.indexOf('seg:') === 0) {
       if (ST.ui.tab === 'part') renderPartOutputs();
       if (ST.ui.tab === 'sim') renderSimOutputs();
     }
   }
 
+  const num = t => parseFloat(String(t).replace(/\s/g, '').replace(',', '.'));   // «0,8» и «0.8» — одно и то же
   document.addEventListener('click', e => {
     const b = e.target.closest('.stepper button');
     if (!b) return;
     const st = b.parentElement, inp = $('input', st);
     const step = +st.dataset.step, min = +st.dataset.min, dec = +st.dataset.dec;
-    let v = (+inp.value || 0) + step * (+b.dataset.d);
+    let v = (num(inp.value) || 0) + step * (+b.dataset.d);
     v = Math.max(min, Math.round(v / step) * step);
     v = +v.toFixed(Math.max(dec, 3));
     inp.value = fmt(v, dec);
@@ -211,7 +216,7 @@
   document.addEventListener('input', e => {
     const st = e.target.closest('.stepper');
     if (!st) return;
-    const v = parseFloat(String(e.target.value).replace(',', '.'));
+    const v = num(e.target.value);
     if (!isFinite(v) || v < +st.dataset.min) return;
     const t = target(st.dataset.obj);
     if (t) { t[st.dataset.key] = v; onValue(st.dataset.obj, st.dataset.key); }
@@ -362,6 +367,18 @@
     return area * pu.L * 7.85e-6; // сталь 7.85 г/см³
   }
 
+  let threeWait = null;
+  function ensureThree(cb) {
+    if (typeof THREE !== 'undefined') { cb(); return; }
+    if (!threeWait) threeWait = new Promise(res => {
+      const sc = document.createElement('script');
+      sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
+      sc.onload = res; sc.onerror = () => { threeWait = null; res(); };   // не загрузилось — View3D сам напишет, что 3D недоступно
+      document.head.appendChild(sc);
+    });
+    threeWait.then(cb);
+  }
+
   function renderPunchView() {
     if (ST.ui.tab !== 'punch') return;
     const pu = curPunch();
@@ -373,8 +390,13 @@
     $('#punch3d').hidden = !is3d;
     $('#punch3dHint').hidden = !is3d;
     if (is3d) {
-      if (!view3d) view3d = new LG.View3D($('#punch3d'));
-      view3d.setShape([ps.outline], pu.L);
+      if (!view3d && typeof THREE === 'undefined') $('#punch3d').innerHTML = '<p class="muted pad">Загружаю 3D…</p>';
+      ensureThree(() => {
+        if (ST.ui.tab !== 'punch' || ST.ui.pview !== '3d') return;
+        const cur = curPunch(); if (!cur) return;
+        if (!view3d) { $('#punch3d').innerHTML = ''; view3d = new LG.View3D($('#punch3d')); }
+        view3d.setShape([G.punchShape(cur).outline], cur.L);
+      });
       return;
     }
     if (ps.custom) { drawCustomPunch(pu, ps); return; }
@@ -747,9 +769,6 @@
   // СИМУЛЯЦИЯ
   // =====================================================================
   let R = null;
-  const optGroups = (groups, sel) => groups.filter(g => g[1].length).map(g => '<optgroup label="' + g[0] + '">' +
-    g[1].map(x => '<option value="' + x.id + '"' + (x.id === sel ? ' selected' : '') + '>' + esc(x.name) + '</option>').join('') + '</optgroup>').join('');
-
   // Раскрывающийся список (как на вкладках): кнопка с текущим выбором → панель с поиском и папками
   const simPick = { open: null, q: { punch: '', die: '' } };
   function picker(kind, label, cur) {
@@ -796,6 +815,15 @@
   }
 
   const kv = (k, v) => '<div class="k">' + k + '</div><div class="v">' + v + '</div>';
+  // Просвет между кромкой поднятого пуансона и верхом матрицы: стол → подложка → матрица … пуансон → крепление → балка
+  function gapRow(r) {
+    if (!r.punch) return '';
+    const m = ST.machine, gap = m.D - m.holderH - G.punchShape(r.punch).H - (m.padH + r.die.H);
+    const need = r.S + 5;
+    return kv('Просвет', '<b class="' + (gap < need ? 'bad' : '') + '">' + fmt(gap, 0) + ' мм</b>' + (gap < need
+      ? ' — инструмент не помещается: пуансон + матрица + подложка выше открытой высоты пресса (' + fmt(m.D, 0) + ' мм)'
+      : ' <span class="muted">(пуансон поднят — до матрицы)</span>'));
+  }
   function renderCalc() {
     const r = R, p = ST.part;
     const over = r.ton > ST.machine.maxTon;
@@ -809,6 +837,7 @@
       kv('Усилие', fmt(r.force.F, 0) + ' кН/м <span class="muted">(' + r.force.src + ')</span>') +
       kv('На ' + fmt(p.L, 0) + ' мм', '<b class="' + (over ? 'bad' : '') + '">' + fmt(r.fullKN, 1) + ' кН ≈ ' + fmt(r.ton, 1) + ' т</b>' + (over ? ' — больше, чем может пресс (' + ST.machine.maxTon + ' т)' : '')) +
       kv('Заготовка', fmt(r.an.flat, 2) + ' мм') +
+      gapRow(r) +
       '</div>';
     const msgs = r.an.errors.map(e => '<li class="bad">' + esc(e) + '</li>').concat(r.an.warnings.map(w => '<li class="warn">' + esc(w) + '</li>'));
     if (msgs.length) h += '<ul class="msgs">' + msgs.join('') + '</ul>';
@@ -817,6 +846,7 @@
     $('#calcOut').innerHTML = h;
   }
 
+  const hitList = s => uniq(s.hits.map(x => x.angle ? x.tool : 'удар — ' + x.tool)).join(', ');
   function renderBends() {
     const pl = PLAYER.plan, an = R.an;
     const box = $('#bendOut');
@@ -827,7 +857,7 @@
     let h = '';
     if (!pl.ok) {
       const bad = pl.steps.filter(s => s.hits.length);
-      h += '<div class="alert"><b>⛔ Без удара согнуть не получается.</b><div>' + bad.map(s => 'Гиб Г' + (s.bend + 1) + ' (шаг ' + (pl.steps.indexOf(s) + 1) + ') ударяется: ' + uniq(s.hits.map(x => x.tool)).join(', ')).join('<br>') + '</div>' +
+      h += '<div class="alert"><b>⛔ Без удара согнуть не получается.</b><div>' + bad.map(s => 'Гиб Г' + (s.bend + 1) + ' (шаг ' + (pl.steps.indexOf(s) + 1) + '): ' + hitList(s)).join('<br>') + '</div>' +
         '<div class="small">' + (auto
           ? (pl.exhaustive ? 'Проверены все порядки гибов и все положения детали (развернуть другим краем к упору, перевернуть лист). Показан вариант с наименьшим числом ударов.'
                            : 'Проверено несколько тысяч вариантов порядка и положения детали — без ударов не нашлось.')
@@ -859,7 +889,7 @@
     h += '<div class="tbl-wrap"><table class="bends"><thead><tr><th>Шаг</th><th>Гиб</th><th>Угол</th><th>Действие оператора</th><th>Упор</th><th>Статус</th><th></th></tr></thead><tbody>';
     pl.steps.forEach((s, k) => {
       const b = an.bends[s.bend];
-      const st = s.hits.length ? '<span class="bad">удар: ' + uniq(s.hits.map(x => x.tool)).join(', ') + '</span>' : '<span class="good">ок</span>';
+      const st = s.hits.length ? '<span class="bad">' + hitList(s) + '</span>' : '<span class="good">ок</span>';
       h += '<tr class="' + (s.hits.length ? 'row-bad' : '') + '"><td><button type="button" class="link" data-goto="' + k + '">' + (k + 1) + ' ▶</button></td>' +
         '<td>Г' + (s.bend + 1) + '</td><td>' + fmt(b.incl, 0) + '°</td>' +
         '<td>' + s.notes.map(esc).join('<br>') + '<div class="muted">К упору: ' + s.backEdge + '</div></td>' +
@@ -876,7 +906,6 @@
     root.addEventListener('change', e => {
       const id = e.target.id, p = ST.part;
       if (id === 'mirSel') p.punchMirror = e.target.value === '1';
-      else if (id === 'vSel') p.V = e.target.value ? +e.target.value : null;
       else return;
       saveAll(); renderSimTab();
     });
@@ -1002,7 +1031,7 @@
     if (order && (order.length !== r.an.bends.length || uniq(order).length !== order.length || order.some(i => i >= r.an.bends.length))) order = null;
     PLAYER.sim = sim;
     PLAYER.plan = sim.plan(order);
-    PLAYER.alts = []; PLAYER.dieAlts = []; PLAYER.dieAltsBusy = false;
+    PLAYER.alts = []; PLAYER.altsBusy = false; PLAYER.dieAlts = []; PLAYER.dieAltsBusy = false;
     if (!PLAYER.plan.ok) findAlternatives(r);   // в фоне, по кусочкам — страница не подвисает
     PLAYER.t = 0;
     PLAYER.view = computeView(sim, PLAYER.plan);
@@ -1016,8 +1045,9 @@
     const cur = r.punch, out = [], t0 = performance.now(), token = PLAYER.key;
     PLAYER.altsBusy = true;
     const score = pu => Math.abs((pu.H || 0) - (cur.H || 0)) / 40 + ((pu.angle && cur.angle) ? Math.abs(pu.angle - cur.angle) / 15 : 1);
+    const minIncl = Math.min.apply(null, r.an.bends.map(b => b.incl));
     const cands = [{ pu: cur, m: !ST.part.punchMirror }].concat(
-      allPunches().filter(pu => pu.id !== cur.id).sort((a, b) => score(a) - score(b))
+      allPunches().filter(pu => pu.id !== cur.id && !(pu.angle > minIncl + 0.5)).sort((a, b) => score(a) - score(b))
         .reduce((acc, pu) => acc.concat([{ pu, m: !!ST.part.punchMirror }, { pu, m: !ST.part.punchMirror }]), []));
     let k = 0;
     const slice = () => {
@@ -1275,7 +1305,7 @@
           const src = findDie(ST.ui.editDie) || CAT.dies[0];
           const n = Object.assign(clone(src), { id: uid('d_'), name: src.name + (isCat(src.id) ? ' (моя)' : ' (копия)') });
           // своя копия — параметрическая: V, угол, R, H, W можно менять
-          if (n.type === 'custom') { delete n.type; delete n.outline; delete n.vDepth; delete n.note; delete n.group; }
+          if (n.type === 'custom') { delete n.type; delete n.outline; delete n.vDepth; delete n.note; delete n.group; delete n.others; }
           ST.dies.push(n); ST.ui.editDie = n.id; break;
         }
         case 'dieDel':
@@ -1362,9 +1392,27 @@
   }
 
   // ---------- Запуск ----------
+  function showVersion() {
+    const me = $('script[src*="js/ui.js"]'), m = me && /[?&]v=(\d{12})/.exec(me.getAttribute('src') || '');
+    const box = $('#appVer');
+    if (!m || !box) return;
+    const v = m[1], nice = x => x.slice(6, 8) + '.' + x.slice(4, 6) + '.' + x.slice(0, 4) + ' ' + x.slice(8, 10) + ':' + x.slice(10, 12);
+    box.textContent = 'версия ' + nice(v);
+    if (location.protocol.indexOf('http') !== 0) return;
+    // version.txt всегда запрашивается мимо кэша; если там номер новее — предлагаем обновить
+    fetch('version.txt?t=' + Date.now(), { cache: 'no-store' }).then(r => r.ok ? r.text() : '').then(t => {
+      const nv = (t || '').trim();
+      if (!/^\d{12}$/.test(nv) || nv <= v) return;
+      box.innerHTML = 'версия ' + nice(v) + ' · <button type="button" class="link" id="appUpd">вышла новая (' + nice(nv) + ') — обновить</button>';
+      $('#appUpd').addEventListener('click', () => { location.replace(location.pathname + '?u=' + nv); });
+      toast('Вышла новая версия сайта — нажмите «обновить» внизу страницы');
+    }).catch(() => { /* без сети — просто не проверяем */ });
+  }
+
   function init() {
     $$('.tabs button').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
     bindPunchTab(); bindPartTab(); bindSimTab(); bindDiesTab();
+    showVersion();
     setTab(['punch', 'part', 'sim', 'dies', 'table'].indexOf(ST.ui.tab) >= 0 ? ST.ui.tab : 'part');
   }
 

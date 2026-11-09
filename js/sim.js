@@ -87,10 +87,14 @@
     return res;
   };
 
-  // Проверка одного шага (гиб cur после done) в нескольких фазах
+  // Проверка одного шага (гиб cur после done) в нескольких фазах.
+  // Пять фаз, а не три: полка может задеть инструмент в середине хода и к концу гиба уже разойтись с ним.
   Sim.prototype.checkStep = function (done, cur, mirror, samples) {
     let all = [];
-    for (const f of samples || [0, 0.5, 1]) {
+    // Пуансон с кромкой шире угла гиба этот гиб не сделает (упрётся гранями в лист) — считаем как удар
+    const pa = this.ctx.punch && this.ctx.punch.angle, b = this.ctx.an.bends[cur];
+    if (!samples && pa > 0 && b && b.incl < pa - 0.5) all.push({ f: 1, tool: 'угол пуансона ' + Math.round(pa) + '° шире гиба ' + Math.round(b.incl) + '°', hits: [], angle: true });
+    for (const f of samples || [0, 0.25, 0.5, 0.75, 1]) {
       const pl = this.place(this.fracs(done, cur, f), cur, mirror);
       const c = this.collide(pl, pl.tipY);
       if (c.length) all = all.concat(c.map(x => Object.assign({ f }, x)));

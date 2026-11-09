@@ -54,6 +54,7 @@
     while (this.group.children.length) {
       const o = this.group.children.pop();
       o.geometry && o.geometry.dispose();
+      o.material && o.material.dispose();   // иначе при каждом переключении пуансона копятся материалы
     }
     const mat = new THREE.MeshStandardMaterial({ color: color || 0x9fb4cf, metalness: 0.35, roughness: 0.45 });
     const edgeMat = new THREE.LineBasicMaterial({ color: 0x2c4f86 });
