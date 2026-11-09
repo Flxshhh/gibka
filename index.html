@@ -9,13 +9,13 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <!-- шрифты подгружаются, не задерживая страницу: пока их нет, текст виден системным шрифтом -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Oswald:wght@500;600&family=PT+Sans:wght@400;700&display=swap" media="print" onload="this.media='all'">
-  <link rel="stylesheet" href="css/style.css?v=202611092013">
+  <link rel="stylesheet" href="css/style.css?v=202611092016">
 </head>
 <body>
   <header class="top">
     <a class="brand" href="https://wirkenrus.com" target="_blank" rel="noopener" title="wirkenrus.com">
-      <img class="brand-logo logo-light" src="img/logo.png?v=202611092013" alt="wirken" width="351" height="67">
-      <img class="brand-logo logo-dark" src="img/logo-dark.png?v=202611092013" alt="wirken" width="351" height="67">
+      <img class="brand-logo logo-light" src="img/logo.png?v=202611092016" alt="wirken" width="351" height="67">
+      <img class="brand-logo logo-dark" src="img/logo-dark.png?v=202611092016" alt="wirken" width="351" height="67">
       <h1 class="sr-only">Листогиб — симулятор гибки</h1>
     </a>
     <nav class="tabs">
@@ -31,6 +31,7 @@
   </header>
 
   <main>
+    <div id="viewBar" class="view-bar" hidden></div>
     <!-- ПУАНСОНЫ -->
     <section class="tab" id="tab-punch" hidden>
       <div class="side-layout">
@@ -112,7 +113,7 @@
     <section class="tab" id="tab-sim" hidden>
       <div class="side-layout">
         <aside class="side-stack">
-          <div class="card">
+          <div class="card" id="toolCard">
             <h2>Инструмент</h2>
             <div id="toolForm" class="form"></div>
           </div>
@@ -123,7 +124,15 @@
         </aside>
         <div class="side-stack">
           <div class="card" id="simCard">
-            <h2>Симуляция гибки</h2>
+            <div class="row between">
+              <h2>Симуляция гибки</h2>
+              <div class="row" id="simActions">
+                <button type="button" id="printBtn" title="Лист для оператора: деталь, развёртка, инструмент и порядок гибов">🖨 Карта гибки</button>
+                <button type="button" id="shareBtn" title="Ссылка, по которой откроется только эта гибка">🔗 Поделиться</button>
+                <button type="button" id="reqBtn" title="Отправить в wirken запрос на подобранный инструмент">✉ Заявка в wirken</button>
+              </div>
+            </div>
+            <div id="simPanel" class="sim-panel" hidden></div>
             <div id="simHud" class="hud"></div>
             <div class="sim-wrap">
               <svg id="simSvg" class="view sim" preserveAspectRatio="xMidYMid meet"></svg>
@@ -231,18 +240,19 @@
   <footer class="foot"><b>ЛИСТОГИБ</b> · расчёт развёртки и симуляция гибки на листогибочном прессе · <a href="https://wirkenrus.com" target="_blank" rel="noopener">wirkenrus.com</a> · <a href="tel:+79626965974">+7 962 696-59-74</a> · <span id="appVer" class="app-ver"></span></footer>
 
   <div id="toast" class="toast"></div>
+  <div id="printCard" class="print-card"></div>
 
   <!-- three.js (3D-вид пуансона) подгружается только при открытии 3D — см. ensureThree в js/ui.js -->
-  <script src="js/data.js?v=202611092013"></script>
-  <script src="js/catalog.js?v=202611092013"></script>
-  <script src="js/catalog-dxf.js?v=202611092013"></script>
-  <script src="js/catalog-dies.js?v=202611092013"></script>
-  <script src="js/geom.js?v=202611092013"></script>
-  <script src="js/dxf.js?v=202611092013"></script>
-  <script src="js/calc.js?v=202611092013"></script>
-  <script src="js/svg.js?v=202611092013"></script>
-  <script src="js/sim.js?v=202611092013"></script>
-  <script src="js/view3d.js?v=202611092013"></script>
-  <script src="js/ui.js?v=202611092013"></script>
+  <script src="js/data.js?v=202611092016"></script>
+  <script src="js/catalog.js?v=202611092016"></script>
+  <script src="js/catalog-dxf.js?v=202611092016"></script>
+  <script src="js/catalog-dies.js?v=202611092016"></script>
+  <script src="js/geom.js?v=202611092016"></script>
+  <script src="js/dxf.js?v=202611092016"></script>
+  <script src="js/calc.js?v=202611092016"></script>
+  <script src="js/svg.js?v=202611092016"></script>
+  <script src="js/sim.js?v=202611092016"></script>
+  <script src="js/view3d.js?v=202611092016"></script>
+  <script src="js/ui.js?v=202611092016"></script>
 </body>
 </html>

@@ -9,12 +9,22 @@
   const uniq = a => a.filter((x, i) => a.indexOf(x) === i);
   const fmt = SV.fmt;
 
+  // ---------- Ссылка «только гибка» ----------
+  // В адресе после #g= лежит деталь с инструментом. Открывший видит только симуляцию, его собственные данные не трогаются.
+  const b64e = o => btoa(unescape(encodeURIComponent(JSON.stringify(o)))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const b64d = t => JSON.parse(decodeURIComponent(escape(atob(t.replace(/-/g, '+').replace(/_/g, '/')))));
+  const VIEW = (() => {
+    const m = /^#g=([A-Za-z0-9_-]+)/.exec(location.hash || '');
+    if (!m) return null;
+    try { const d = b64d(m[1]); return d && d.part && Array.isArray(d.part.segs) ? d : null; } catch (e) { return null; }
+  })();
+
   // ---------- Хранилище ----------
   const KEY = 'lg.v1.';
   function load(k, def) {
     try { const v = localStorage.getItem(KEY + k); return v ? JSON.parse(v) : clone(def); } catch (e) { return clone(def); }
   }
-  function store(k, v) { try { localStorage.setItem(KEY + k, JSON.stringify(v)); } catch (e) { /* без хранилища тоже работаем */ } }
+  function store(k, v) { if (VIEW) return; try { localStorage.setItem(KEY + k, JSON.stringify(v)); } catch (e) { /* без хранилища тоже работаем */ } }
 
   const ST = {
     punches: load('punches', []),   // «Мои» — личные, в браузере; общий каталог — LG.CATALOG
@@ -46,7 +56,7 @@
   });
   // Один раз: сохранённый «Прямой …» (его могли переключить в гусак) делаем прямым по фото
   // и ставим первым — от него делаются копии. Название, высоты, угол, R и длину не трогаем.
-  if (!ST.ui.migStraightPhoto) {
+  if (!ST.ui.migStraightPhoto && !VIEW) {   // при просмотре по ссылке в хранилище не пишем вообще
     ST.punches.forEach(p => {
       if (p.id === 'p_straight' || /^\s*прям/i.test(p.name || '')) { p.type = 'straight'; p.W = 26; p.T = 17; }
     });
@@ -57,6 +67,23 @@
       localStorage.setItem(KEY + 'punches', JSON.stringify(ST.punches));
       localStorage.setItem(KEY + 'ui', JSON.stringify(ST.ui));
     } catch (e) { /* без хранилища — просто применится при следующем открытии */ }
+  }
+
+  if (VIEW) {
+    const vp = VIEW.part, numOr = (v, d) => (isFinite(+v) && +v > 0 ? +v : d);
+    ST.part = Object.assign(clone(LG.DEFAULT_PART), {
+      name: String(vp.name || 'Деталь').slice(0, 80), S: numOr(vp.S, 1), L: numOr(vp.L, 1000),
+      material: LG.MATERIALS[vp.material] ? vp.material : 'Fe', dimMode: ['outer', 'inner', 'mid'].indexOf(vp.dimMode) >= 0 ? vp.dimMode : 'outer',
+      segs: vp.segs.map(s => ({ dir: +s.dir, len: +s.len })).filter(s => isFinite(s.dir) && s.len > 0).slice(0, 40),
+      order: Array.isArray(vp.order) ? vp.order.map(Number) : null, punchMirror: !!vp.punchMirror,
+      punchId: String(vp.punchId || ''), dieId: String(vp.dieId || 'auto'), riOverride: numOr(vp.riOverride, null), kOverride: numOr(vp.kOverride, null)
+    });
+    const okOutline = x => Array.isArray(x.outline) && x.outline.length > 2 && x.outline.length < 2000 && x.outline.every(p => Array.isArray(p) && isFinite(+p[0]) && isFinite(+p[1]));
+    const vpu = VIEW.punch, vdi = VIEW.die;
+    if (vpu && vpu.id && (vpu.type !== 'custom' ? vpu.Hb > 0 && vpu.W > 0 : okOutline(vpu) && vpu.H > 0 && vpu.Hb > 0)) ST.punches = ST.punches.filter(x => x.id !== vpu.id).concat([vpu]);
+    if (vdi && vdi.id && vdi.V > 0 && vdi.angle > 0 && vdi.H > 0 && (vdi.type !== 'custom' || okOutline(vdi))) ST.dies = ST.dies.filter(x => x.id !== vdi.id).concat([vdi]);
+    if (VIEW.machine) ['D', 'holderH', 'holderW', 'padH', 'padW', 'maxTon'].forEach(k => { if (isFinite(+VIEW.machine[k]) && +VIEW.machine[k] >= 0) ST.machine[k] = +VIEW.machine[k]; });
+    ST.ui = Object.assign({}, ST.ui, { tab: 'sim' });
   }
 
   // Каталог (общий, только чтение) + «Мои» (личные)
@@ -736,7 +763,15 @@
         '<text x="150" y="95" class="empty-s" text-anchor="middle">добавьте первый отрезок кнопками слева</text>';
       return;
     }
-    if (an.errors.some(e => /длина должна/.test(e))) { svg.innerHTML = ''; return; }
+    const pm = profileMarkup(r, true);
+    if (!pm) { svg.innerHTML = ''; return; }
+    svg.setAttribute('viewBox', pm.viewBox);
+    svg.innerHTML = pm.html;
+  }
+  // Чертёж профиля с размерами; withVtx — с точками, от которых можно достраивать (только в конструкторе)
+  function profileMarkup(r, withVtx) {
+    const an = r.an;
+    if (!an.segs.length || an.errors.some(e => /длина должна/.test(e))) return null;
     const shape = G.sheetShape(an, null, r.S, r.Ri);
     const sharp = [{ x: 0, y: 0 }];
     an.segs.forEach(s => {
@@ -765,15 +800,14 @@
     h += SV.text({ x: shape.start.x, y: shape.start.y - fs * 0.9 }, 'начало', fs * 0.6, 'lbl-s');
     // Точки, с которых можно достраивать: начало, каждый изгиб, конец
     const cur = cursorPos();
-    sharp.forEach((pt, i) => {
+    if (withVtx) sharp.forEach((pt, i) => {
       h += '<g class="vtx' + (i === cur ? ' on' : '') + '" data-vtx="' + i + '"><title>' +
         (i === 0 ? 'Достраивать от начала' : i === sharp.length - 1 ? 'Достраивать от конца' : 'Достраивать от изгиба Г' + i) + '</title>' +
         SV.circle(pt, fs * 0.75, 'vtx-hit') + SV.circle(pt, fs * (i === cur ? 0.42 : 0.28), 'vtx-dot') + '</g>';
     });
     const bb = G.bounds(shape.poly, G.bounds(sharp));
     bb.x0 -= fs * 3; bb.x1 += fs * 3; bb.y0 -= fs * 2.5; bb.y1 += fs * 2.5;
-    svg.setAttribute('viewBox', SV.viewBox(bb, 0));
-    svg.innerHTML = h;
+    return { viewBox: SV.viewBox(bb, 0), html: h };
   }
 
   function bindPartTab() {
@@ -1011,6 +1045,92 @@
     box.innerHTML = h;
   }
 
+  function copyText(txt, okMsg) {
+    const fallback = () => { const ta = $('#panelText'); if (ta) { ta.focus(); ta.select(); } toast('Текст выделен — скопируйте его вручную', 4000); };
+    try { navigator.clipboard.writeText(txt).then(() => toast(okMsg), fallback); } catch (err) { fallback(); }
+  }
+
+  // Ссылка на текущую гибку: деталь, выбранный инструмент (свой — целиком, из каталога — по номеру) и станок
+  function shareUrl() {
+    const p = ST.part, r = R || resolve();
+    const slim = o => { const c = clone(o); delete c.raw; delete c.rk; delete c.mir; return c; };
+    const d = { v: 1, part: { name: p.name, S: p.S, L: p.L, material: p.material, dimMode: p.dimMode, segs: p.segs, order: p.order, punchMirror: !!p.punchMirror,
+      punchId: r.punch ? r.punch.id : p.punchId, dieId: r.auto ? 'auto' : r.die.id, riOverride: p.riOverride || null, kOverride: p.kOverride || null }, machine: ST.machine };
+    if (r.punch && !isCat(r.punch.id)) d.punch = slim(r.punch);
+    if (!r.auto && !isCat(r.die.id)) d.die = slim(r.die);
+    return location.origin + location.pathname + '#g=' + b64e(d);
+  }
+  function sharePanel() {
+    if (!ST.part.segs.length) { toast('Сначала постройте деталь'); return; }
+    const url = shareUrl();
+    $('#simPanel').hidden = false;
+    $('#simPanel').innerHTML = '<div class="row between"><b>Ссылка на эту гибку</b><button type="button" class="ghost sm" id="panelClose">✕</button></div>' +
+      '<p class="muted small">Кто откроет ссылку, увидит только симуляцию этой детали с вашим инструментом: без каталога, конструктора и настроек. Ваши данные при этом не меняются.</p>' +
+      '<textarea id="panelText" class="backup" rows="3" readonly>' + esc(url) + '</textarea>' +
+      '<div class="row"><button type="button" class="primary" id="panelCopy">Скопировать ссылку</button>' +
+      (navigator.share ? '<button type="button" id="panelShare">Отправить…</button>' : '') +
+      '<a class="link-btn" href="' + esc(url) + '" target="_blank" rel="noopener">Открыть, как увидит получатель</a></div>';
+  }
+
+  // Заявка в wirken: текст с подобранным инструментом и деталью
+  function requestPanel() {
+    const p = ST.part, r = R || resolve();
+    if (!r.punch) { toast('Нет пуансона'); return; }
+    const mat = LG.MATERIALS[p.material].name.split(',')[0];
+    const bends = r.an.bends.map(b => fmt(b.incl, 0) + '°').join(', ');
+    const txt = 'Здравствуйте! Нужен инструмент для листогиба:\n' +
+      '— Пуансон: ' + r.punch.name + ' (A ' + fmt(r.punch.H, 1) + ' мм' + (r.punch.angle ? ', угол ' + fmt(r.punch.angle, 0) + '°' : '') + ', R ' + fmt(r.punch.r, 2) + '), длина ' + fmt(r.punch.L || p.L, 0) + ' мм\n' +
+      '— Матрица: ' + (r.die.id === 'auto' ? 'V' + fmt(r.V, 1) + ', ' + fmt(r.die.angle, 0) + '°' : r.die.name + ' (V' + fmt(r.V, 1) + ', ' + fmt(r.die.angle, 0) + '°)') + '\n' +
+      'Деталь: ' + (p.name || 'без названия') + ' — ' + mat + ' ' + fmt(r.S, 2) + ' мм, длина гиба ' + fmt(p.L, 0) + ' мм' +
+      (bends ? ', гибы: ' + bends : '') + ', усилие ≈ ' + fmt(r.ton, 1) + ' т.\n' +
+      (p.segs.length ? 'Гибка: ' + shareUrl() + '\n' : '') + 'Прошу сообщить наличие и стоимость.';
+    $('#simPanel').hidden = false;
+    $('#simPanel').innerHTML = '<div class="row between"><b>Заявка в wirken</b><button type="button" class="ghost sm" id="panelClose">✕</button></div>' +
+      '<p class="muted small">Текст можно поправить. Потом отправьте его в WhatsApp или скопируйте и пришлите любым удобным способом.</p>' +
+      '<textarea id="panelText" class="backup" rows="7">' + esc(txt) + '</textarea>' +
+      '<div class="row"><a class="link-btn primary" id="panelWa" href="#" target="_blank" rel="noopener">Отправить в WhatsApp</a>' +
+      '<button type="button" id="panelCopy">Скопировать текст</button><a class="link-btn" href="tel:+79626965974">☎ +7 962 696-59-74</a></div>';
+    const upd = () => { $('#panelWa').href = 'https://wa.me/79626965974?text=' + encodeURIComponent($('#panelText').value); };
+    upd(); $('#panelText').addEventListener('input', upd);
+  }
+
+  // Карта гибки для печати или сохранения в PDF: всё, что нужно оператору, на одном листе
+  function printCard() {
+    const p = ST.part, r = R || resolve(), pl = PLAYER.plan;
+    if (!pl || !pl.steps.length) { toast('Сначала нужна деталь с гибами без ошибок'); return; }
+    const pm = profileMarkup(r, false), mat = LG.MATERIALS[p.material].name.split(',')[0];
+    const row = (k, v) => '<tr><th>' + k + '</th><td>' + v + '</td></tr>';
+    const d = new Date(), date = ('0' + d.getDate()).slice(-2) + '.' + ('0' + (d.getMonth() + 1)).slice(-2) + '.' + d.getFullYear();
+    let h = '<div class="pc-head"><img src="img/logo.png" alt="wirken"><div><div class="pc-title">Карта гибки</div><div class="pc-sub">' + esc(p.name || 'Деталь') + ' · ' + date + '</div></div></div>';
+    h += '<div class="pc-cols"><table class="pc-kv">' +
+      row('Лист', mat + ', S = ' + fmt(r.S, 2) + ' мм') +
+      row('Заготовка', '<b>' + fmt(r.an.flat, 2) + ' × ' + fmt(p.L, 0) + ' мм</b>') +
+      row('Пуансон', esc(r.punch.name) + (r.punch.angle ? ' · ' + fmt(r.punch.angle, 0) + '°' : '') + ' · R' + fmt(r.punch.r, 2) + (punchKind(r.punch) === 'Гусак' ? ' · выемкой ' + (p.punchMirror ? 'к упору' : 'к оператору') : '')) +
+      row('Матрица', (r.die.id === 'auto' ? '' : esc(r.die.name) + ' · ') + 'V' + fmt(r.V, 1) + ' · ' + fmt(r.die.angle, 0) + '°') +
+      row('Усилие', fmt(r.force.F, 0) + ' кН/м · на длину ≈ ' + fmt(r.ton, 1) + ' т') +
+      row('Радиус гиба', 'Ri ≈ ' + fmt(r.Ri, 2) + ' мм · K = ' + fmt(r.K, 3)) +
+      row('Размеры заданы', { outer: 'по наружной стороне', inner: 'по внутренней стороне', mid: 'по средней линии' }[p.dimMode]) +
+      '</table>' + (pm ? '<svg class="pc-profile" viewBox="' + pm.viewBox + '" preserveAspectRatio="xMidYMid meet">' + pm.html + '</svg>' : '') + '</div>';
+    h += '<div class="pc-h">Развёртка: линии гиба от начала заготовки (отрезок 1)</div>' + flatStrip(r.an) +
+      '<div class="pc-chips">' + r.an.bends.map(b => '<span>Г' + (b.i + 1) + ' — ' + fmt(b.pos, 2) + ' мм</span>').join('') + '</div>';
+    h += '<div class="pc-h">Порядок гибов</div>' + (pl.ok ? '' : '<div class="pc-warn">Внимание: в этом порядке есть столкновения — см. отметки в таблице.</div>') +
+      '<table class="pc-steps"><thead><tr><th>Шаг</th><th>Гиб</th><th>Угол</th><th>Действие</th><th>К упору</th><th>Упор, мм</th><th>✓</th></tr></thead><tbody>' +
+      pl.steps.map((s, k) => '<tr><td>' + (k + 1) + '</td><td>Г' + (s.bend + 1) + '</td><td>' + fmt(r.an.bends[s.bend].incl, 0) + '°</td><td>' +
+        (s.notes.map(esc).join('<br>') || 'то же положение') + (s.hits.length ? '<br><b>' + esc(hitList(s)) + '</b>' : '') + '</td><td>' + esc(s.backEdge) + '</td><td><b>' +
+        (s.stop != null ? fmt(s.stop, 1) : '—') + '</b></td><td class="pc-box"></td></tr>').join('') + '</tbody></table>';
+    const msgs = r.an.warnings.map(esc);
+    if (msgs.length) h += '<div class="pc-h">Замечания</div><ul class="pc-notes">' + msgs.map(m => '<li>' + m + '</li>').join('') + '</ul>';
+    h += '<div class="pc-foot">Упор — расстояние от оси пуансона до заднего упора. Расчёт справочный: первый гиб проверяйте на образце. · wirkenrus.com · +7 962 696-59-74</div>';
+    $('#printCard').innerHTML = h;
+    // печатаем всегда в светлой теме; логотип должен успеть загрузиться
+    const root = document.documentElement, prev = root.getAttribute('data-theme');
+    root.setAttribute('data-theme', 'light');
+    const done = () => { if (prev) root.setAttribute('data-theme', prev); else root.removeAttribute('data-theme'); window.removeEventListener('afterprint', done); };
+    window.addEventListener('afterprint', done);
+    const img = $('#printCard img'), go = () => setTimeout(() => window.print(), 50);
+    if (img && !img.complete) { img.onload = go; img.onerror = go; } else go();
+  }
+
   function bindSimTab() {
     const root = $('#tab-sim');
     root.addEventListener('change', e => {
@@ -1042,6 +1162,12 @@
         });
         return;
       }
+      if (e.target.id === 'printBtn') { printCard(); return; }
+      if (e.target.id === 'shareBtn') { sharePanel(); return; }
+      if (e.target.id === 'reqBtn') { requestPanel(); return; }
+      if (e.target.id === 'panelClose') { $('#simPanel').hidden = true; return; }
+      if (e.target.id === 'panelCopy') { copyText($('#panelText').value, 'Скопировано'); return; }
+      if (e.target.id === 'panelShare') { navigator.share({ title: 'Листогиб: ' + ST.part.name, url: $('#panelText').value }).catch(() => {}); return; }
       const sug = e.target.closest('[data-sugdie]');
       if (sug) {
         p.dieId = sug.dataset.sugdie; p.order = null;
@@ -1533,6 +1659,14 @@
     $$('.tabs button').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
     bindPunchTab(); bindPartTab(); bindSimTab(); bindDiesTab();
     showVersion();
+    window.addEventListener('hashchange', () => { if (/^#g=/.test(location.hash) || VIEW) location.reload(); });
+    if (VIEW) {
+      document.body.classList.add('view-only');
+      const bar = $('#viewBar'); bar.hidden = false;
+      bar.innerHTML = '<span>Гибка детали <b>' + esc(ST.part.name) + '</b> — просмотр по ссылке</span>' +
+        '<a href="' + esc(location.pathname) + '">Открыть весь сайт</a>';
+      setTab('sim'); return;
+    }
     setTab(['punch', 'part', 'sim', 'dies', 'table'].indexOf(ST.ui.tab) >= 0 ? ST.ui.tab : 'part');
   }
 
