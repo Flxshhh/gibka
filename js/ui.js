@@ -77,10 +77,23 @@
     }, 200);
   }
 
-  function toast(msg) {
+  function toast(msg, ms) {
     const t = $('#toast');
     t.textContent = msg; t.classList.add('show');
-    clearTimeout(toast.tm); toast.tm = setTimeout(() => t.classList.remove('show'), 2000);
+    clearTimeout(toast.tm); toast.tm = setTimeout(() => t.classList.remove('show'), ms || 2000);
+  }
+  // Прочитать выбранный файл чертежа: cb(текст, имя без расширения)
+  function readDxf(input, cb) {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    const rd = new FileReader();
+    rd.onload = () => {
+      input.value = '';
+      try { cb(String(rd.result), file.name.replace(/\.dxf$/i, '')); }
+      catch (err) { toast('Не получилось разобрать чертёж: ' + err.message, 6000); }
+    };
+    rd.onerror = () => toast('Файл не прочитался', 4000);
+    rd.readAsText(file);
   }
 
   // Подтверждение вторым нажатием (системные окна подтверждения на странице Claude не работают)
@@ -270,7 +283,9 @@
         '<div class="field span2 muted small">Тип: <b>' + (pu.type === 'custom' ? 'по каталогу' + (pu.group ? ' · ' + esc(pu.group) : '') : pu.type === 'straight' ? 'прямой' : 'гусак') + '</b></div>' +
         (pu.type === 'custom'
           ? '<p class="field span2 muted small">Точный контур по чертежу' + (pu.note ? ' (' + esc(pu.note) + ')' : '') + '. A = ' + fmt(pu.H, 1) + ' мм, H = ' + fmt(pu.Hb, 1) + ' мм' + (pu.angle ? ', угол ' + fmt(pu.angle, 1) + '°' : '') + '.</p>' +
-            PUNCH_F.filter(f => ['L', 'r'].indexOf(f[0]) >= 0).map(f => stepper('punch', f[0], pu[f[0]], f[2], f[3], f[4], f[1])).join('')
+            PUNCH_F.filter(f => ['L', 'r'].indexOf(f[0]) >= 0 || (f[0] === 'angle' && pu.angle > 0 && !isCat(pu.id))).map(f => stepper('punch', f[0], pu[f[0]], f[2], f[3], f[4], f[1])).join('') +
+            (isCat(pu.id) ? '' : '<div class="field span2"><label>Если чертёж встал не так</label><div class="row">' +
+              '<button type="button" data-punchrot="rot">⟳ Повернуть на 90°</button><button type="button" data-punchrot="mir">⇋ Отразить</button></div></div>')
           : PUNCH_F.filter(f => pu.type !== 'straight' || ['W', 'shelf', 'tL', 'noseL'].indexOf(f[0]) < 0).map(f => stepper('punch', f[0], pu[f[0]], f[2], f[3], f[4], f[1])).join(''))
       : '<p class="muted">Нет пуансонов</p>';
     $$('[data-pview]').forEach(b => b.classList.toggle('on', b.dataset.pview === ST.ui.pview));
@@ -463,6 +478,15 @@
       const pv = e.target.closest('[data-pview]');
       if (pv) { ST.ui.pview = pv.dataset.pview; saveAll(); renderPunchTab(); return; }
       const t = e.target;
+      if (t.id === 'punchDxfBtn') { $('#punchDxf').click(); return; }
+      const rt = t.closest('[data-punchrot]');
+      if (rt) {
+        const i = ST.punches.findIndex(x => x.id === ST.ui.editPunch);
+        if (i < 0 || !ST.punches[i].outline) return;
+        const n = LG.DXF.rotatePunch(ST.punches[i], rt.dataset.punchrot === 'mir');
+        if (!(n.angle > 0)) delete n.angle;
+        ST.punches[i] = n; saveAll(); renderPunchTab(); return;
+      }
       if (t.id === 'punchNew') {
         const src = curPunch() || CAT.punches[0];
         const n = Object.assign(clone(src), { id: uid('p_'), name: src.name + (isCat(src.id) ? ' (моя)' : ' (копия)') });
@@ -474,6 +498,14 @@
       } else return;
       saveAll(); renderPunchTab();
     });
+    $('#punchDxf').addEventListener('change', e => readDxf(e.target, (text, name) => {
+      const r = LG.DXF.punch(text, name);
+      if (r.error) { toast(r.error, 7000); return; }
+      const n = Object.assign(r.punch, { id: uid('p_') });
+      ST.punches.push(n); ST.ui.editPunch = n.id; ST.part.punchId = n.id; ST.part.order = null;
+      saveAll(); renderPunchTab();
+      toast('Пуансон «' + name + '» добавлен в «Мои»: A ' + fmt(n.H, 1) + ' мм' + (n.angle ? ', угол ' + fmt(n.angle, 1) + '°' : '') + ', R ' + fmt(n.r, 1), 5000);
+    }));
     root.addEventListener('input', e => {
       if (e.target.id === 'punchSearch') { ST.ui.punchQ = e.target.value; renderPunchSide(); return; }
       if (e.target.id !== 'punchName') return;
@@ -534,6 +566,10 @@
     }
     h += '<div class="field"><label>Или готовый шаблон</label><select id="presetSel"><option value="">Выбрать…</option>' +
       Object.keys(PRESETS).map(k => '<option>' + k + '</option>').join('') + '</select></div>';
+    h += '<div class="field"><label>Или строкой: длина, угол гиба, длина…</label><div class="row str-row">' +
+      '<input type="text" id="segStr" autocomplete="off" placeholder="30 90 60 -90 30" value="' + esc(partToString()) + '"><button type="button" id="segStrGo">Построить</button></div>' +
+      '<div class="muted small">Через пробел: длины, а между ними углы гибов, как на чертеже (90 — прямой угол). Угол с минусом — гиб в другую сторону.</div></div>';
+    h += '<div class="field"><label>Или из чертежа</label><button type="button" id="partDxfBtn" title="Профиль детали: одна линия или замкнутый контур листа">⬆ Контур детали из DXF</button></div>';
     $('#addForm').innerHTML = h;
 
     $('#partsForm').innerHTML =
@@ -608,8 +644,59 @@
     saveAll(); renderPartOutputs();
   }
 
+  // Деталь одной строкой: «30 90 60 -90 30» — длина, угол гиба, длина… (угол — внутренний, минус — гиб вправо по ходу)
+  function partToString() {
+    const sg = ST.part.segs; let out = [];
+    sg.forEach((s, i) => {
+      out.push(fmt(s.len, 2));
+      if (i < sg.length - 1) { const beta = G.norm180(sg[i + 1].dir - s.dir); out.push((beta < 0 ? '-' : '') + fmt(180 - Math.abs(beta), 2)); }
+    });
+    return out.join(' ');
+  }
+  function partFromString(txt) {
+    const tk = String(txt).trim().split(/[\s;]+/).filter(Boolean).map(num);
+    if (!tk.length || tk.some(v => !isFinite(v))) return { error: 'Не понял строку: нужны только числа через пробел, например «30 90 60 -90 30»' };
+    if (tk.length % 2 === 0) return { error: 'Строка должна заканчиваться длиной: длина, угол, длина, … , длина' };
+    const segs = []; let dir = 0;
+    for (let i = 0; i < tk.length; i += 2) {
+      if (!(tk[i] > 0)) return { error: 'Длина должна быть больше 0 (позиция ' + (i + 1) + ')' };
+      segs.push({ dir: +(((dir % 360) + 360) % 360).toFixed(3), len: tk[i] });
+      if (i + 1 < tk.length) {
+        const a = Math.abs(tk[i + 1]);
+        if (!(a > 0.5 && a < 179.5)) return { error: 'Угол гиба должен быть между 1° и 179° (позиция ' + (i + 2) + ')' };
+        dir += (tk[i + 1] < 0 ? -1 : 1) * (180 - a);
+      }
+    }
+    return { segs };
+  }
+
+  // История правок детали: отмена и возврат. Следим за состоянием после каждой перерисовки,
+  // подряд набираемые цифры одного размера считаем одним действием.
+  const HIST = { undo: [], redo: [], cur: null, t: 0, typing: false };
+  const partSnap = () => JSON.stringify({ segs: ST.part.segs, S: ST.part.S, dimMode: ST.part.dimMode });
+  function histReset() { HIST.undo = []; HIST.redo = []; HIST.cur = null; HIST.typing = false; }
+  function histTrack() {
+    const now = partSnap();
+    if (HIST.cur == null) { HIST.cur = now; return; }
+    if (now === HIST.cur) return;
+    const a = JSON.parse(HIST.cur), b = JSON.parse(now), t = Date.now();
+    const numsOnly = a.segs.length === b.segs.length && a.dimMode === b.dimMode && a.segs.every((s, i) => s.dir === b.segs[i].dir);
+    if (!(numsOnly && HIST.typing && t - HIST.t < 1500)) { HIST.undo.push(HIST.cur); if (HIST.undo.length > 100) HIST.undo.shift(); }
+    HIST.typing = numsOnly; HIST.t = t; HIST.redo = []; HIST.cur = now;
+  }
+  function histGo(back) {
+    const from = back ? HIST.undo : HIST.redo, to = back ? HIST.redo : HIST.undo;
+    if (!from.length) { toast(back ? 'Отменять нечего' : 'Возвращать нечего'); return; }
+    to.push(HIST.cur); HIST.cur = from.pop(); HIST.typing = false;
+    Object.assign(ST.part, JSON.parse(HIST.cur)); ST.part.order = null; ST.ui.cursor = null;
+    saveAll(); renderPartTab();
+  }
+
   function renderPartOutputs() {
     if (ST.ui.tab !== 'part') return;
+    histTrack();
+    $('#segUndo').disabled = !HIST.undo.length; $('#segRedo').disabled = !HIST.redo.length;
+    const ss = $('#segStr'); if (ss && document.activeElement !== ss) ss.value = partToString();
     renderSegList();
     const r = resolve(), an = r.an, p = ST.part;
     renderProfile(r);
@@ -691,6 +778,21 @@
 
   function bindPartTab() {
     const root = $('#tab-part');
+    $('#partDxf').addEventListener('change', e => readDxf(e.target, (text, name) => {
+      const r = LG.DXF.part(text), p = ST.part;
+      if (r.error) { toast(r.error, 8000); return; }
+      p.segs = r.segs; p.order = null; ST.ui.cursor = null; p.name = name;
+      if (r.S) { p.S = r.S; p.dimMode = r.dimMode; }
+      saveAll(); renderPartTab();
+      toast('Из чертежа: отрезков ' + r.segs.length + ', гибов ' + (r.segs.length - 1) + (r.S ? ', толщина ' + fmt(r.S, 2) + ' мм (размеры по средней линии)' : ' — проверьте толщину и то, как заданы размеры'), 6000);
+    }));
+    root.addEventListener('keydown', e => { if (e.target.id === 'segStr' && e.key === 'Enter') $('#segStrGo').click(); });
+    document.addEventListener('keydown', e => {
+      if (ST.ui.tab !== 'part' || !(e.ctrlKey || e.metaKey) || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+      const k = e.key.toLowerCase();
+      if (k === 'z' && !e.shiftKey) { e.preventDefault(); histGo(true); }
+      else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); histGo(false); }
+    });
     root.addEventListener('change', e => {
       const id = e.target.id, p = ST.part;
       if (id === 'matSel') p.material = e.target.value;
@@ -729,13 +831,20 @@
         return;
       }
       switch (t.id) {
-        case 'segUndo': {
+        case 'segUndo': histGo(true); break;
+        case 'segRedo': histGo(false); break;
+        case 'segMirror':
           if (!p.segs.length) break;
-          const c = cursorPos();
-          p.segs.splice(Math.max(0, c - 1), 1); p.order = null;
-          if (ST.ui.cursor != null) ST.ui.cursor = Math.max(0, c - 1);
-          saveAll(); renderPartOutputs(); break;
+          p.segs.forEach(s => { s.dir = +((((180 - s.dir) % 360) + 360) % 360).toFixed(3); });
+          p.order = null; saveAll(); renderPartOutputs(); toast('Деталь отражена: левая ↔ правая'); break;
+        case 'segStrGo': {
+          const r = partFromString($('#segStr').value);
+          if (r.error) { toast(r.error, 5000); break; }
+          p.segs = r.segs; p.order = null; ST.ui.cursor = null;
+          saveAll(); renderPartOutputs(); $('#segStr').value = partToString();
+          toast('Построено: отрезков ' + r.segs.length + ', гибов ' + (r.segs.length - 1)); break;
         }
+        case 'partDxfBtn': $('#partDxf').click(); break;
         case 'segClear':
           if (!p.segs.length || !armed(t, 'Точно очистить?')) return;
           p.segs = []; p.order = null; ST.ui.cursor = null; saveAll(); renderPartOutputs(); break;
@@ -748,12 +857,13 @@
           break;
         }
         case 'partNew':
+          histReset();
           ST.part = Object.assign(clone(LG.DEFAULT_PART), { S: p.S, material: p.material, L: p.L, dimMode: p.dimMode,
             punchId: p.punchId, punchMirror: p.punchMirror, dieId: p.dieId, V: p.V });
           ST.ui.cursor = null; saveAll(); renderPartTab(); break;
         case 'partLoad': {
           const x = ST.parts[+$('#partList').value];
-          if (x) { ST.part = Object.assign(clone(LG.DEFAULT_PART), clone(x)); ST.ui.cursor = null; saveAll(); renderPartTab(); toast('Открыта «' + x.name + '»'); }
+          if (x) { histReset(); ST.part = Object.assign(clone(LG.DEFAULT_PART), clone(x)); ST.ui.cursor = null; saveAll(); renderPartTab(); toast('Открыта «' + x.name + '»'); }
           break;
         }
         case 'partDel': {
@@ -1223,7 +1333,8 @@
         ' · глубина ручья ' + fmt(di.vDepth, 1) + ' мм</div>' : '') +
       (di.others && di.others.length ? '<div class="field span2 small"><b>Другие ручьи этой матрицы:</b> ' + di.others.map(o =>
         'V' + fmt(o.V, 1) + ' · ' + fmt(o.angle, 0) + '° · R' + fmt(o.r, 1) + ' · глубина ' + fmt(o.depth, 1) + (o.face ? ' <span class="muted">(другой гранью вверх)</span>' : ' <span class="muted">(рядом)</span>')).join('; ') + '</div>' : '') +
-      DIE_F.map(f => stepper('die', f[0], di[f[0]], f[2], f[3], f[4], f[1])).join('') : '<p class="muted">Нет матриц</p>';
+      // у матрицы с контуром из чертежа высота и ширина заданы контуром — правятся только V, угол и R плеч
+      DIE_F.filter(f => di.type !== 'custom' || ['V', 'angle', 'r'].indexOf(f[0]) >= 0).map(f => stepper('die', f[0], di[f[0]], f[2], f[3], f[4], f[1])).join('') : '<p class="muted">Нет матриц</p>';
     lockIfCatalog('#dieForm', isCat(ST.ui.editDie));
     $('#dieDel').hidden = isCat(ST.ui.editDie);
     $('#machForm').innerHTML = MACH_F.map(f => stepper('machine', f[0], ST.machine[f[0]], f[2], f[3], f[4], f[1])).join('');
@@ -1301,6 +1412,7 @@
         saveAll(); renderDiesTab(); return;
       }
       switch (t.id) {
+        case 'dieDxfBtn': $('#dieDxf').click(); return;
         case 'dieNew': {
           const src = findDie(ST.ui.editDie) || CAT.dies[0];
           const n = Object.assign(clone(src), { id: uid('d_'), name: src.name + (isCat(src.id) ? ' (моя)' : ' (копия)') });
@@ -1333,6 +1445,14 @@
       const o = target('die');
       if (o) { o.name = e.target.value; saveAll(); const b = $('#dieList .on b'); if (b) b.textContent = o.name; }
     });
+    $('#dieDxf').addEventListener('change', e => readDxf(e.target, (text, name) => {
+      const r = LG.DXF.dies(text, name);
+      if (r.error) { toast(r.error, 7000); return; }
+      r.dies.forEach(d => { d.id = uid('d_'); ST.dies.push(d); });
+      ST.ui.editDie = r.dies[0].id; ST.part.dieId = r.dies[0].id; ST.part.order = null;
+      saveAll(); renderDiesTab();
+      toast('Матрица «' + name + '» добавлена в «Мои»: ' + r.dies.map(d => 'V' + fmt(d.V, 1) + ' ' + fmt(d.angle, 0) + '°').join(', '), 5000);
+    }));
     $('#importFile').addEventListener('change', e => {
       const file = e.target.files[0];
       if (!file) return;

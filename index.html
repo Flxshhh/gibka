@@ -9,13 +9,13 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <!-- шрифты подгружаются, не задерживая страницу: пока их нет, текст виден системным шрифтом -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Oswald:wght@500;600&family=PT+Sans:wght@400;700&display=swap" media="print" onload="this.media='all'">
-  <link rel="stylesheet" href="css/style.css?v=202611091957">
+  <link rel="stylesheet" href="css/style.css?v=202611092013">
 </head>
 <body>
   <header class="top">
     <a class="brand" href="https://wirkenrus.com" target="_blank" rel="noopener" title="wirkenrus.com">
-      <img class="brand-logo logo-light" src="img/logo.png?v=202611091957" alt="wirken" width="351" height="67">
-      <img class="brand-logo logo-dark" src="img/logo-dark.png?v=202611091957" alt="wirken" width="351" height="67">
+      <img class="brand-logo logo-light" src="img/logo.png?v=202611092013" alt="wirken" width="351" height="67">
+      <img class="brand-logo logo-dark" src="img/logo-dark.png?v=202611092013" alt="wirken" width="351" height="67">
       <h1 class="sr-only">Листогиб — симулятор гибки</h1>
     </a>
     <nav class="tabs">
@@ -40,7 +40,9 @@
           <div id="punchSide" class="side-list"></div>
           <div class="row">
             <button type="button" id="punchNew">+ Копия</button>
+            <button type="button" id="punchDxfBtn" title="Загрузить профиль своего пуансона из чертежа DXF">⬆ Свой DXF</button>
             <button type="button" class="ghost" id="punchDel">Удалить</button>
+            <input type="file" id="punchDxf" accept=".dxf,.DXF" hidden>
           </div>
         </aside>
         <div class="card">
@@ -81,7 +83,9 @@
             <div class="row between">
               <h2>Деталь</h2>
               <div class="row">
-                <button type="button" id="segUndo">↶ Отменить</button>
+                <button type="button" id="segUndo" title="Отменить последнее действие (Ctrl+Z)">↶ Отменить</button>
+                <button type="button" id="segRedo" title="Вернуть отменённое (Ctrl+Y)">↷ Вернуть</button>
+                <button type="button" id="segMirror" title="Зеркальная деталь: левая ↔ правая">⇋ Зеркально</button>
                 <button type="button" class="ghost" id="segClear">Очистить</button>
                 <button type="button" class="primary" id="goBend">▶ Гнуть</button>
               </div>
@@ -90,6 +94,7 @@
             <svg id="profileSvg" class="view" preserveAspectRatio="xMidYMid meet"></svg>
             <div id="curInfo" class="cur-info"></div>
             <div id="segList" class="seg-list"></div>
+            <input type="file" id="partDxf" accept=".dxf,.DXF" hidden>
           </div>
           <div class="card">
             <h2>Развёртка</h2>
@@ -157,7 +162,10 @@
       <div class="grid">
         <div class="card wide">
           <div class="row between"><h2>Матрицы</h2>
-            <div class="row"><button type="button" id="dieNew">+ Копия</button><button type="button" class="ghost" id="dieDel">Удалить</button></div></div>
+            <div class="row"><button type="button" id="dieNew">+ Копия</button>
+              <button type="button" id="dieDxfBtn" title="Загрузить профиль своей матрицы из чертежа DXF">⬆ Свой DXF</button>
+              <button type="button" class="ghost" id="dieDel">Удалить</button>
+              <input type="file" id="dieDxf" accept=".dxf,.DXF" hidden></div></div>
           <div class="side-layout">
             <div>
               <input type="search" id="dieSearch" class="side-search" placeholder="Поиск: V12, 88, T80, двухручьевая…" aria-label="Поиск матрицы">
@@ -225,15 +233,16 @@
   <div id="toast" class="toast"></div>
 
   <!-- three.js (3D-вид пуансона) подгружается только при открытии 3D — см. ensureThree в js/ui.js -->
-  <script src="js/data.js?v=202611091957"></script>
-  <script src="js/catalog.js?v=202611091957"></script>
-  <script src="js/catalog-dxf.js?v=202611091957"></script>
-  <script src="js/catalog-dies.js?v=202611091957"></script>
-  <script src="js/geom.js?v=202611091957"></script>
-  <script src="js/calc.js?v=202611091957"></script>
-  <script src="js/svg.js?v=202611091957"></script>
-  <script src="js/sim.js?v=202611091957"></script>
-  <script src="js/view3d.js?v=202611091957"></script>
-  <script src="js/ui.js?v=202611091957"></script>
+  <script src="js/data.js?v=202611092013"></script>
+  <script src="js/catalog.js?v=202611092013"></script>
+  <script src="js/catalog-dxf.js?v=202611092013"></script>
+  <script src="js/catalog-dies.js?v=202611092013"></script>
+  <script src="js/geom.js?v=202611092013"></script>
+  <script src="js/dxf.js?v=202611092013"></script>
+  <script src="js/calc.js?v=202611092013"></script>
+  <script src="js/svg.js?v=202611092013"></script>
+  <script src="js/sim.js?v=202611092013"></script>
+  <script src="js/view3d.js?v=202611092013"></script>
+  <script src="js/ui.js?v=202611092013"></script>
 </body>
 </html>

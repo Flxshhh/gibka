@@ -362,3 +362,8 @@ th, td { border-bottom: 1px solid var(--line); padding: 6px 8px; text-align: lef
 .picker-list { max-height: 55vh; }
 .sugg { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); display: grid; gap: 6px; }
 .vinfo { padding: 8px 10px; border: 1px solid var(--line); border-radius: 4px; background: var(--card); font-size: 14px; }
+
+/* Ввод детали строкой */
+.str-row { flex-wrap: nowrap; }
+.str-row input { flex: 1; min-width: 0; font-family: var(--f-mono); }
+button:disabled { opacity: .5; cursor: not-allowed; }
