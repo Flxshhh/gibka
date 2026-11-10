@@ -945,6 +945,7 @@
         (r.die.id !== 'auto' ? esc(r.die.name) + ' · ' : '') + 'V' + fmt(r.V, 1) + ' · ' + fmt(r.die.angle, 0) + '°</span></span>'
         : dieThumb(r.die) + '<span><b>' + esc(r.die.name) + '</b><span class="muted small">V' + fmt(r.die.V, 1) + ' · ' + fmt(r.die.angle, 0) + '° · H' + fmt(r.die.H, 0) + '</span></span>') +
       vSel +
+      stepper('part', 'L', p.L, 10, 1, 0, 'Длина гиба (вдоль линии), мм', 'span2') +
       stepper('part', 'riOverride', p.riOverride || 0, 0.1, 0, 2, 'Ri вручную, мм (0 — авто)') +
       stepper('part', 'kOverride', p.kOverride || 0, 0.01, 0, 2, 'K-фактор вручную (0 — авто)');
     renderSimOutputs();
@@ -1403,6 +1404,7 @@
     $('#simSvg').toggleAttribute('hidden', on);
     $('#sim3d').hidden = !on;
     $('.mag-ov').hidden = on; $('#simZoom').hidden = on;
+    $('#sim3dLen').hidden = !on;
     if (!on) { drawFrame(); return; }
     if (!sim3d && typeof THREE === 'undefined') $('#sim3d').innerHTML = '<p class="muted pad">Загружаю 3D…</p>';
     ensureThree(() => {
@@ -1466,6 +1468,12 @@
       moving.forEach(n => { v.parts[n].position.y = PLAYER.openY || sim.tipOpen; });
       v.setPart('sheet', sheet, L, { color: 0xf0b429, metal: 0.15 });
       v.setPart('gauge', null);
+      // размерная линия длины гиба — перед матрицей, со стороны оператора
+      const bd = G.bounds(sim.die.poly), dx = Math.min(bd.x0, -m.padW / 2) - 18, dy = 0, tk = 10;
+      v.setLines('len', [[[dx, dy, -L / 2], [dx, dy, L / 2]], [[dx - tk, dy, -L / 2], [dx + tk, dy, -L / 2]], [[dx - tk, dy, L / 2], [dx + tk, dy, L / 2]],
+        [[dx, dy, -L / 2], [bd.x0, dy, -L / 2]], [[dx, dy, L / 2], [bd.x0, dy, L / 2]]]);
+      $('#sim3dLen').innerHTML = 'Длина гиба <b>' + fmt(L, 0) + ' мм</b>' + (L !== +ST.part.L ? ' <span class="muted">(в детали ' + fmt(ST.part.L, 0) + ')</span>' : '') +
+        ' <span class="muted">· меняется слева, в «Инструменте»</span>';
       v.fit(1.45);
     }
     moving.forEach(n => { v.parts[n].position.y = tip; });

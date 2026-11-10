@@ -9,13 +9,13 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <!-- шрифты подгружаются, не задерживая страницу: пока их нет, текст виден системным шрифтом -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Oswald:wght@500;600&family=PT+Sans:wght@400;700&display=swap" media="print" onload="this.media='all'">
-  <link rel="stylesheet" href="css/style.css?v=202611100658">
+  <link rel="stylesheet" href="css/style.css?v=202611101228">
 </head>
 <body>
   <header class="top">
     <a class="brand" href="https://wirkenrus.com" target="_blank" rel="noopener" title="wirkenrus.com">
-      <img class="brand-logo logo-light" src="img/logo.png?v=202611100658" alt="wirken" width="351" height="67">
-      <img class="brand-logo logo-dark" src="img/logo-dark.png?v=202611100658" alt="wirken" width="351" height="67">
+      <img class="brand-logo logo-light" src="img/logo.png?v=202611101228" alt="wirken" width="351" height="67">
+      <img class="brand-logo logo-dark" src="img/logo-dark.png?v=202611101228" alt="wirken" width="351" height="67">
       <h1 class="sr-only">Листогиб — симулятор гибки</h1>
     </a>
     <nav class="tabs">
@@ -138,6 +138,7 @@
             <div class="sim-wrap">
               <svg id="simSvg" class="view sim" preserveAspectRatio="xMidYMid meet"></svg>
               <div id="sim3d" class="view sim view3d" hidden></div>
+              <div id="sim3dLen" class="len-ov" hidden></div>
               <div class="mag-ov" title="Приближение к гибу: ползунок или колесо мыши, двойной клик — сброс">
                 <button type="button" class="mag-btn" data-mag="1.25" aria-label="Приблизить">+</button>
                 <div class="mag-track"><input type="range" id="simMag" min="1" max="12" step="0.1" value="1" aria-label="Приближение к гибу"></div>
@@ -246,16 +247,16 @@
   <div id="printCard" class="print-card"></div>
 
   <!-- three.js (3D-вид пуансона) подгружается только при открытии 3D — см. ensureThree в js/ui.js -->
-  <script src="js/data.js?v=202611100658"></script>
-  <script src="js/catalog.js?v=202611100658"></script>
-  <script src="js/catalog-dxf.js?v=202611100658"></script>
-  <script src="js/catalog-dies.js?v=202611100658"></script>
-  <script src="js/geom.js?v=202611100658"></script>
-  <script src="js/dxf.js?v=202611100658"></script>
-  <script src="js/calc.js?v=202611100658"></script>
-  <script src="js/svg.js?v=202611100658"></script>
-  <script src="js/sim.js?v=202611100658"></script>
-  <script src="js/view3d.js?v=202611100658"></script>
-  <script src="js/ui.js?v=202611100658"></script>
+  <script src="js/data.js?v=202611101228"></script>
+  <script src="js/catalog.js?v=202611101228"></script>
+  <script src="js/catalog-dxf.js?v=202611101228"></script>
+  <script src="js/catalog-dies.js?v=202611101228"></script>
+  <script src="js/geom.js?v=202611101228"></script>
+  <script src="js/dxf.js?v=202611101228"></script>
+  <script src="js/calc.js?v=202611101228"></script>
+  <script src="js/svg.js?v=202611101228"></script>
+  <script src="js/sim.js?v=202611101228"></script>
+  <script src="js/view3d.js?v=202611101228"></script>
+  <script src="js/ui.js?v=202611101228"></script>
 </body>
 </html>

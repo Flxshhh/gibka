@@ -87,6 +87,19 @@
     if (o.edges) g.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo, 25), new THREE.LineBasicMaterial({ color: o.edgeColor || 0x5b6570 })));
     return g;
   };
+  // Набор отрезков в пространстве (размерная линия): segs — массив пар точек [[x,y,z],[x,y,z]]
+  View3D.prototype.setLines = function (name, segs, color) {
+    if (!this.ok) return null;
+    this.parts = this.parts || {};
+    let g = this.parts[name];
+    if (!g) { g = this.parts[name] = new THREE.Group(); this.group.add(g); }
+    while (g.children.length) { const c = g.children.pop(); c.geometry.dispose(); c.material.dispose(); }
+    if (!segs || !segs.length) return g;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute([].concat(...segs.map(s => s[0].concat(s[1]))), 3));
+    g.add(new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: color || 0x115398 })));
+    return g;
+  };
   // Навести камеру на всю сцену (вызывается при смене детали или инструмента; дальше вид крутит пользователь)
   View3D.prototype.fit = function (k) {
     if (!this.ok) return;

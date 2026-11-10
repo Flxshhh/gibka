@@ -419,3 +419,8 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 .mag-ov[hidden], #sim3d[hidden], #simZoom[hidden] { display: none; }
 
 #recBtn.rec { background: var(--red); color: #fff; border-color: var(--red); }
+
+/* Подпись длины гиба поверх 3D-вида */
+.len-ov { position: absolute; left: 10px; bottom: 10px; padding: 5px 10px; border: 1px solid var(--line); border-radius: 4px; background: var(--card); font-size: 13px; pointer-events: none; }
+.len-ov[hidden] { display: none; }
+.view-only .len-ov .muted { display: none; }
