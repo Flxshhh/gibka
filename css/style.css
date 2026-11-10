@@ -68,6 +68,9 @@
 
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
+/* на телефоне браузер не должен сам увеличивать шрифт в широких блоках; страница не прокручивается вбок */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body { overflow-x: clip; }
 body { margin: 0; background: var(--bg); color: var(--ink); font: 14.5px/1.5 var(--f-body); -webkit-font-smoothing: antialiased; }
 h1, h2 { font-family: var(--f-display); color: var(--ink); text-wrap: balance; }
 h1 { font-size: 24px; margin: 0; font-weight: 700; }
@@ -117,8 +120,8 @@ main { padding-block: 18px; padding-left: max(16px, env(safe-area-inset-left, 0p
 .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 .card { scroll-margin-top: calc(76px + env(safe-area-inset-top, 0px)); background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 18px; min-width: 0; box-shadow: var(--shadow); }
 .card.wide { grid-column: 1 / -1; }
-@media (max-width: 1000px) { .grid { grid-template-columns: 1fr 1fr; } .grid > .card:nth-child(3) { grid-column: 1 / -1; } }
-@media (max-width: 680px) { .grid { grid-template-columns: 1fr; } .card { padding: 14px; } }
+@media (max-width: 1000px) { .grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .grid > .card:nth-child(3) { grid-column: 1 / -1; } }
+@media (max-width: 680px) { .grid { grid-template-columns: minmax(0, 1fr); } .card { padding: 14px; } }
 
 .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .between { justify-content: space-between; }
@@ -196,7 +199,7 @@ input[type=range] { accent-color: var(--accent); }
 
 /* ---------- Раскладка «список слева + рабочая зона» ---------- */
 .side-layout { display: grid; grid-template-columns: minmax(260px, 320px) minmax(0, 1fr); gap: 16px; align-items: start; }
-@media (max-width: 860px) { .side-layout { grid-template-columns: 1fr; } }
+@media (max-width: 860px) { .side-layout { grid-template-columns: minmax(0, 1fr); } }
 .side-stack { display: grid; gap: 16px; min-width: 0; }
 .side { display: grid; gap: 10px; }
 .side-search { width: 100%; font: inherit; color: var(--ink); background: var(--card); border: 1px solid var(--line-2); border-radius: var(--r-c); padding: 8px 12px; min-height: 36px; }
@@ -265,15 +268,18 @@ svg .vtx.on .vtx-dot, svg .vtx:hover .vtx-dot { fill: var(--accent); }
 .view { width: 100%; background-color: var(--card); background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px); background-size: 32px 32px; border-radius: var(--r-c); border: 1px solid var(--line); display: block; }
 #profileSvg { height: 360px; }
 .view3d { position: relative; overflow: hidden; touch-action: none; }
-.view3d canvas { display: block; cursor: grab; }
+/* Холст 3D лежит поверх своего окна и не участвует в раскладке: его внутренний размер в пикселях
+   (в 2–3 раза больше видимого на телефоне) не может растянуть колонку и панель. */
+.view3d canvas { position: absolute; inset: 0; width: 100% !important; height: 100% !important; display: block; cursor: grab; }
 .view.sim { height: min(70vh, 620px); }
 .view.tool { height: 520px; }
 svg .empty-t { font-size: 18px; font-weight: 700; fill: var(--muted); }
 svg .empty-s { font-size: 12px; fill: var(--muted); }
 .editor { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
-@media (max-width: 760px) { .editor { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { .editor { grid-template-columns: minmax(0, 1fr); } }
+.editor > *, .side-layout > *, .form > *, .field { min-width: 0; }
 .editor .form { grid-template-columns: 1fr 1fr; }
-@media (max-width: 420px) { .editor .form { grid-template-columns: 1fr; } }
+@media (max-width: 420px) { .editor .form { grid-template-columns: minmax(0, 1fr); } }
 
 svg .sheet { fill: var(--sheet-fill); stroke: var(--sheet); stroke-width: 1.5; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
 svg .sheet.hit { stroke: var(--hit); }
