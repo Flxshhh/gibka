@@ -193,8 +193,8 @@
       const notes = [];
       if (k === 0) notes.push('Положите лист стороной ' + face + ' вверх');
       else {
-        if (face !== prevFace) notes.push('⟳ Переверните лист (сторона ' + face + ' вверх)');
-        if (s.mirror !== prevMirror) notes.push('⇄ Разверните деталь другим краем к упору');
+        if (face !== prevFace) notes.push('Переверните лист (сторона ' + face + ' вверх)');
+        if (s.mirror !== prevMirror) notes.push('Разверните деталь другим краем к упору');
       }
       // Какой край к упору и где упор
       const pl = this.place(this.fracs(done, s.bend, 0), s.bend, s.mirror);

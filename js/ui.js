@@ -8,6 +8,8 @@
   const uid = p => p + Math.random().toString(36).slice(2, 9);
   const uniq = a => a.filter((x, i) => a.indexOf(x) === i);
   const fmt = SV.fmt;
+  // Иконка из набора в index.html (линейные значки вместо эмодзи); rot — поворот в градусах
+  const ic = (n, cls, rot) => '<svg class="ic' + (cls ? ' ' + cls : '') + '" aria-hidden="true"' + (rot ? ' style="transform:rotate(' + rot + 'deg)"' : '') + '><use href="#i-' + n + '"/></svg>';
 
   // ---------- Ссылка «только гибка» ----------
   // В адресе после #g= лежит деталь с инструментом. Открывший видит только симуляцию, его собственные данные не трогаются.
@@ -125,9 +127,9 @@
 
   // Подтверждение вторым нажатием (системные окна подтверждения на странице Claude не работают)
   function armed(btn, text) {
-    if (btn.dataset.armed === '1') { btn.dataset.armed = ''; btn.textContent = btn.dataset.orig; return true; }
-    btn.dataset.orig = btn.textContent; btn.dataset.armed = '1'; btn.textContent = text;
-    setTimeout(() => { if (btn.dataset.armed === '1') { btn.dataset.armed = ''; btn.textContent = btn.dataset.orig; } }, 3000);
+    if (btn.dataset.armed === '1') { btn.dataset.armed = ''; btn.innerHTML = btn.dataset.orig; return true; }
+    btn.dataset.orig = btn.innerHTML; btn.dataset.armed = '1'; btn.textContent = text;
+    setTimeout(() => { if (btn.dataset.armed === '1') { btn.dataset.armed = ''; btn.innerHTML = btn.dataset.orig; } }, 3000);
     return false;
   }
 
@@ -312,7 +314,7 @@
           ? '<p class="field span2 muted small">Точный контур по чертежу' + (pu.note ? ' (' + esc(pu.note) + ')' : '') + '. A = ' + fmt(pu.H, 1) + ' мм, H = ' + fmt(pu.Hb, 1) + ' мм' + (pu.angle ? ', угол ' + fmt(pu.angle, 1) + '°' : '') + '.</p>' +
             PUNCH_F.filter(f => ['L', 'r'].indexOf(f[0]) >= 0 || (f[0] === 'angle' && pu.angle > 0 && !isCat(pu.id))).map(f => stepper('punch', f[0], pu[f[0]], f[2], f[3], f[4], f[1])).join('') +
             (isCat(pu.id) ? '' : '<div class="field span2"><label>Если чертёж встал не так</label><div class="row">' +
-              '<button type="button" data-punchrot="rot">⟳ Повернуть на 90°</button><button type="button" data-punchrot="mir">⇋ Отразить</button></div></div>')
+              '<button type="button" data-punchrot="rot">' + ic('rotate') + 'Повернуть на 90°</button><button type="button" data-punchrot="mir">' + ic('flip') + 'Отразить</button></div></div>')
           : PUNCH_F.filter(f => pu.type !== 'straight' || ['W', 'shelf', 'tL', 'noseL'].indexOf(f[0]) < 0).map(f => stepper('punch', f[0], pu[f[0]], f[2], f[3], f[4], f[1])).join(''))
       : '<p class="muted">Нет пуансонов</p>';
     $$('[data-pview]').forEach(b => b.classList.toggle('on', b.dataset.pview === ST.ui.pview));
@@ -586,22 +588,22 @@
       h += '<div class="field"><label>Угол к горизонтали</label><div class="chips-sel">' +
         [30, 45, 60].map(a => '<button type="button" data-segangle="' + a + '" class="' + (u.segAngle === a ? 'on' : '') + '">' + a + '°</button>').join('') + '</div></div>';
       h += '<div class="field"><label>Направление — нажмите, чтобы добавить</label><div class="pad4">' +
-        DIAG.map(d => '<button type="button" class="big" data-adddiag="' + d[0] + '" title="' + d[2] + '">' + d[1] + '</button>').join('') + '</div></div>';
+        DIAG.map(d => '<button type="button" class="big" data-adddiag="' + d[0] + '" title="' + d[2] + '" aria-label="' + d[2] + '">' + ic('arrow', '', { ul: -45, ur: 45, dl: -135, dr: 135 }[d[0]]) + '</button>').join('') + '</div></div>';
     } else {
       h += '<div class="field"><label>Направление — нажмите, чтобы добавить</label><div class="pad-cross">' +
-        STRAIGHT.map(d => '<button type="button" class="big d' + d[0] + '" data-adddir="' + d[0] + '" title="' + d[2] + '">' + d[1] + '</button>').join('') + '</div></div>';
+        STRAIGHT.map(d => '<button type="button" class="big d' + d[0] + '" data-adddir="' + d[0] + '" title="' + d[2] + '" aria-label="' + d[2] + '">' + ic('arrow', '', 90 - d[0]) + '</button>').join('') + '</div></div>';
     }
     h += '<div class="field"><label>Или готовый шаблон</label><select id="presetSel"><option value="">Выбрать…</option>' +
       Object.keys(PRESETS).map(k => '<option>' + k + '</option>').join('') + '</select></div>';
     h += '<div class="field"><label>Или строкой: длина, угол гиба, длина…</label><div class="row str-row">' +
       '<input type="text" id="segStr" autocomplete="off" placeholder="30 90 60 -90 30" value="' + esc(partToString()) + '"><button type="button" id="segStrGo">Построить</button></div>' +
       '<div class="muted small">Через пробел: длины, а между ними углы гибов, как на чертеже (90 — прямой угол). Угол с минусом — гиб в другую сторону.</div></div>';
-    h += '<div class="field"><label>Или из чертежа</label><button type="button" id="partDxfBtn" title="Профиль детали: одна линия или замкнутый контур листа">⬆ Контур детали из DXF</button></div>';
+    h += '<div class="field"><label>Или из чертежа</label><button type="button" id="partDxfBtn" title="Профиль детали: одна линия или замкнутый контур листа">' + ic('upload') + 'Контур детали из DXF</button></div>';
     $('#addForm').innerHTML = h;
 
     $('#partsForm').innerHTML =
       '<div class="field"><label>Название детали</label><input type="text" id="partName" value="' + esc(p.name || '') + '"></div>' +
-      '<div class="row"><button type="button" id="partSave">Сохранить деталь</button><button type="button" class="ghost" id="partNew">Новая пустая деталь</button></div>' +
+      '<div class="row"><button type="button" id="partSave">' + ic('save') + 'Сохранить деталь</button><button type="button" class="ghost" id="partNew">Новая пустая деталь</button></div>' +
       (ST.parts.length
         ? '<div class="field"><label>Сохранённые</label><div class="row"><select id="partList">' +
           ST.parts.map((x, i) => '<option value="' + i + '">' + esc(x.name) + '</option>').join('') +
@@ -632,7 +634,7 @@
 
   function renderSegList() {
     const p = ST.part, c = cursorPos();
-    const mark = '<div class="ins-mark">＋ новые отрезки добавятся сюда</div>';
+    const mark = '<div class="ins-mark">' + ic('plus') + 'новые отрезки добавятся сюда</div>';
     let h = c === 0 && p.segs.length ? mark : '';
     p.segs.forEach((s, i) => {
       const opts = DIR_OPTS.indexOf(((s.dir % 360) + 360) % 360) >= 0 ? DIR_OPTS : DIR_OPTS.concat([s.dir]);
@@ -640,7 +642,7 @@
         '<select class="seg-dir" data-segdir="' + i + '" aria-label="Направление отрезка ' + (i + 1) + '">' +
         opts.map(d => '<option value="' + d + '"' + (Math.abs(G.norm180(d - s.dir)) < 0.01 ? ' selected' : '') + '>' + dirLabel(d) + '</option>').join('') + '</select>' +
         stepper('seg:' + i, 'len', s.len, 1, 0.1, 2, '') +
-        '<button type="button" class="ghost del" data-del="' + i + '" title="Удалить отрезок">✕</button></div>';
+        '<button type="button" class="ghost del" data-del="' + i + '" title="Удалить отрезок" aria-label="Удалить отрезок">' + ic('x') + '</button></div>';
       if (c === i + 1 && c < p.segs.length) h += mark;
     });
     // пока в поле длины печатают — список не перерисовываем, иначе поле теряет фокус после первой цифры
@@ -917,7 +919,7 @@
   const simPick = { open: null, q: { punch: '', die: '' } };
   function picker(kind, label, cur) {
     return '<div class="field span2 picker" data-picker="' + kind + '"><label>' + label + '</label>' +
-      '<button type="button" class="side-item picker-btn" data-picker-btn="' + kind + '">' + cur + '<span class="picker-arr">▾</span></button>' +
+      '<button type="button" class="side-item picker-btn" data-picker-btn="' + kind + '">' + cur + '<span class="picker-arr">' + ic('chev') + '</span></button>' +
       '<div class="picker-pop"' + (simPick.open === kind ? '' : ' hidden') + '>' +
       '<input type="search" class="side-search" data-picker-q="' + kind + '" placeholder="' + (kind === 'punch' ? 'Поиск: TOP.205, 88, гусак…' : 'Поиск: V12, 88, T80…') + '" value="' + esc(simPick.q[kind]) + '">' +
       '<div class="side-list picker-list">' + (simPick.open === kind ? pickerList(kind) : '') + '</div></div></div>';
@@ -991,6 +993,8 @@
     $('#calcOut').innerHTML = h;
   }
 
+  // подсказка оператору со значком: перевернуть лист / развернуть деталь
+  const noteHtml = n => '<div class="note-line">' + (/^Переверните/.test(n) ? ic('flipv') : /^Разверните/.test(n) ? ic('swap') : '') + esc(n) + '</div>';
   const hitList = s => uniq(s.hits.map(x => x.angle ? x.tool : 'удар — ' + x.tool)).join(', ');
   function renderBends() {
     const pl = PLAYER.plan, an = R.an;
@@ -1002,7 +1006,7 @@
     let h = '';
     if (!pl.ok) {
       const bad = pl.steps.filter(s => s.hits.length);
-      h += '<div class="alert"><b>⛔ Без удара согнуть не получается.</b><div>' + bad.map(s => 'Гиб Г' + (s.bend + 1) + ' (шаг ' + (pl.steps.indexOf(s) + 1) + '): ' + hitList(s)).join('<br>') + '</div>' +
+      h += '<div class="alert"><b>' + ic('block', 'lg') + 'Без удара согнуть не получается</b><div>' + bad.map(s => 'Гиб Г' + (s.bend + 1) + ' (шаг ' + (pl.steps.indexOf(s) + 1) + '): ' + hitList(s)).join('<br>') + '</div>' +
         '<div class="small">' + (auto
           ? (pl.exhaustive ? 'Проверены все порядки гибов и все положения детали (развернуть другим краем к упору, перевернуть лист). Показан вариант с наименьшим числом ударов.'
                            : 'Проверено несколько тысяч вариантов порядка и положения детали — без ударов не нашлось.')
@@ -1027,20 +1031,20 @@
       }
       h += '</div>';
     }
-    h += '<div class="row between"><div>' + (auto
-      ? (pl.ok ? '✅ Порядок подобран автоматически, столкновений нет' : '⚠️ Без столкновений подобрать не удалось — см. красные шаги')
-      : (pl.ok ? '✅ Ваш порядок, столкновений нет' : '⚠️ В вашем порядке есть столкновения')) +
+    h += '<div class="row between"><div class="status ' + (pl.ok ? 'good' : 'warn') + '">' + ic(pl.ok ? 'check' : 'warn') + (auto
+      ? (pl.ok ? 'Порядок подобран автоматически, столкновений нет' : 'Без столкновений подобрать не удалось — см. отмеченные шаги')
+      : (pl.ok ? 'Ваш порядок, столкновений нет' : 'В вашем порядке есть столкновения')) +
       '</div>' + (auto ? '' : '<button type="button" id="orderAuto">Подобрать авто</button>') + '</div>';
     h += '<div class="tbl-wrap"><table class="bends"><thead><tr><th>Шаг</th><th>Гиб</th><th>Угол</th><th>Действие оператора</th><th>Упор</th><th>Статус</th><th></th></tr></thead><tbody>';
     pl.steps.forEach((s, k) => {
       const b = an.bends[s.bend];
       const st = s.hits.length ? '<span class="bad">' + hitList(s) + '</span>' : '<span class="good">ок</span>';
-      h += '<tr class="' + (s.hits.length ? 'row-bad' : '') + '"><td><button type="button" class="link" data-goto="' + k + '">' + (k + 1) + ' ▶</button></td>' +
+      h += '<tr class="' + (s.hits.length ? 'row-bad' : '') + '"><td><button type="button" class="link" data-goto="' + k + '" title="Показать этот шаг">' + (k + 1) + ' ' + ic('play', 'sm') + '</button></td>' +
         '<td>Г' + (s.bend + 1) + '</td><td>' + fmt(b.incl, 0) + '°</td>' +
-        '<td>' + s.notes.map(esc).join('<br>') + '<div class="muted">К упору: ' + s.backEdge + '</div></td>' +
+        '<td>' + s.notes.map(noteHtml).join('') + '<div class="muted">К упору: ' + s.backEdge + '</div></td>' +
         '<td>' + (s.stop != null ? fmt(s.stop, 1) + ' мм' : '—') + '</td><td>' + st + '</td>' +
-        '<td class="nowrap"><button type="button" class="ghost sm" data-mv="-1" data-k="' + k + '" title="Раньше">↑</button>' +
-        '<button type="button" class="ghost sm" data-mv="1" data-k="' + k + '" title="Позже">↓</button></td></tr>';
+        '<td class="nowrap"><button type="button" class="ghost sm" data-mv="-1" data-k="' + k + '" title="Раньше" aria-label="Раньше">' + ic('arrow', 'sm') + '</button>' +
+        '<button type="button" class="ghost sm" data-mv="1" data-k="' + k + '" title="Позже" aria-label="Позже">' + ic('arrow', 'sm', 180) + '</button></td></tr>';
     });
     h += '</tbody></table></div><p class="muted small">Упор — расстояние от оси пуансона до точки касания заднего упора. Стрелками ↑↓ можно задать свой порядок.</p>';
     box.innerHTML = h;
@@ -1065,12 +1069,12 @@
     if (!ST.part.segs.length) { toast('Сначала постройте деталь'); return; }
     const url = shareUrl();
     $('#simPanel').hidden = false;
-    $('#simPanel').innerHTML = '<div class="row between"><b>Ссылка на эту гибку</b><button type="button" class="ghost sm" id="panelClose">✕</button></div>' +
+    $('#simPanel').innerHTML = '<div class="row between"><b>Ссылка на эту гибку</b><button type="button" class="ghost sm" id="panelClose" aria-label="Закрыть">' + ic('x') + '</button></div>' +
       '<p class="muted small">Кто откроет ссылку, увидит только симуляцию этой детали с вашим инструментом: без каталога, конструктора и настроек. Ваши данные при этом не меняются.</p>' +
       '<textarea id="panelText" class="backup" rows="3" readonly>' + esc(url) + '</textarea>' +
-      '<div class="row"><button type="button" class="primary" id="panelCopy">Скопировать ссылку</button>' +
-      (navigator.share ? '<button type="button" id="panelShare">Отправить…</button>' : '') +
-      '<a class="link-btn" href="' + esc(url) + '" target="_blank" rel="noopener">Открыть, как увидит получатель</a></div>';
+      '<div class="row"><button type="button" class="primary" id="panelCopy">' + ic('copy') + 'Скопировать ссылку</button>' +
+      (navigator.share ? '<button type="button" id="panelShare">' + ic('send') + 'Отправить…</button>' : '') +
+      '<a class="link-btn" href="' + esc(url) + '" target="_blank" rel="noopener">Открыть, как увидит получатель' + ic('ext') + '</a></div>';
   }
 
   // Заявка в wirken: текст с подобранным инструментом и деталью
@@ -1086,13 +1090,13 @@
       (bends ? ', гибы: ' + bends : '') + ', усилие ≈ ' + fmt(r.ton, 1) + ' т.\n' +
       (p.segs.length ? 'Гибка: ' + shareUrl() + '\n' : '') + 'Прошу сообщить наличие и стоимость.';
     $('#simPanel').hidden = false;
-    $('#simPanel').innerHTML = '<div class="row between"><b>Заявка в wirken</b><button type="button" class="ghost sm" id="panelClose">✕</button></div>' +
+    $('#simPanel').innerHTML = '<div class="row between"><b>Заявка в wirken</b><button type="button" class="ghost sm" id="panelClose" aria-label="Закрыть">' + ic('x') + '</button></div>' +
       '<p class="muted small">Текст можно поправить. <b>Telegram</b> откроет чат с номером +7 962 696-59-74 и подставит текст — останется нажать «Отправить». ' +
       'В <b>MAX</b> ссылок с готовым текстом нет: кнопка скопирует текст, а в MAX найдите контакт по номеру (Контакты → + → «Найти по номеру») и вставьте его.</p>' +
       '<textarea id="panelText" class="backup" rows="7">' + esc(txt) + '</textarea>' +
-      '<div class="row"><a class="link-btn primary" id="panelTg" href="#" target="_blank" rel="noopener">Отправить в Telegram</a>' +
-      '<button type="button" id="panelMax">MAX: скопировать текст и номер</button>' +
-      '<button type="button" id="panelCopy">Скопировать текст</button><a class="link-btn" href="tel:+79626965974">☎ +7 962 696-59-74</a></div>';
+      '<div class="row"><a class="link-btn primary" id="panelTg" href="#" target="_blank" rel="noopener">' + ic('send') + 'Отправить в Telegram</a>' +
+      '<button type="button" id="panelMax">' + ic('copy') + 'MAX: скопировать текст и номер</button>' +
+      '<button type="button" id="panelCopy">' + ic('copy') + 'Скопировать текст</button><a class="link-btn" href="tel:+79626965974">' + ic('phone') + '+7 962 696-59-74</a></div>';
     // Telegram: t.me/+номер?text=… — черновик сообщения в чате с этим номером. Слишком длинная ссылка обрезается, поэтому
     // если текст с адресом гибки не помещается, адрес из черновика убираем (он остаётся в поле и копируется кнопкой).
     const upd = () => {
@@ -1264,7 +1268,7 @@
     drawFrame();
     if (PLAYER.playing) requestAnimationFrame(tick);
   }
-  function updateBtn() { const b = $('#simPlay'); if (b) b.textContent = PLAYER.playing ? '⏸ Пауза' : '▶ Гнуть'; }
+  function updateBtn() { const b = $('#simPlay'); if (b) b.innerHTML = PLAYER.playing ? ic('pause') + 'Пауза' : ic('play') + 'Гнуть'; }
 
   function buildPlan() {
     const r = R;
@@ -1400,7 +1404,7 @@
   function set3d(on, then) {
     PLAYER.d3 = on;
     $('#sim3dBtn').classList.toggle('on', on);
-    $('#sim3dBtn').textContent = on ? '2D' : '3D';
+    $('#sim3dBtn').innerHTML = on ? '2D' : ic('cube') + '3D';
     $('#simSvg').toggleAttribute('hidden', on);
     $('#sim3d').hidden = !on;
     $('.mag-ov').hidden = on; $('#simZoom').hidden = on;
@@ -1437,7 +1441,7 @@
       rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
       rec.onstop = () => {
         sim3d.scene.background = bg; sim3d.render();
-        btn.textContent = '⏺ Видео'; btn.classList.remove('rec');
+        btn.innerHTML = ic('rec') + 'Видео'; btn.classList.remove('rec');
         if (!chunks.length) { toast('Видео не записалось', 4000); return; }
         const type = rec.mimeType || mime || 'video/webm', a = document.createElement('a');
         a.href = URL.createObjectURL(new Blob(chunks, { type }));
@@ -1448,7 +1452,7 @@
       };
       PLAYER.pause(); PLAYER.t = 0; drawFrame();
       PLAYER.rec = rec; rec.start();
-      btn.textContent = '⏹ Стоп'; btn.classList.add('rec');
+      btn.innerHTML = ic('stop') + 'Стоп'; btn.classList.add('rec');
       PLAYER.play();
     };
     if (PLAYER.d3 && sim3d && sim3d.ok) go(); else set3d(true, go);

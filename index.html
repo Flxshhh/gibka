@@ -8,14 +8,47 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <!-- шрифты подгружаются, не задерживая страницу: пока их нет, текст виден системным шрифтом -->
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Oswald:wght@500;600&family=PT+Sans:wght@400;700&display=swap" media="print" onload="this.media='all'">
-  <link rel="stylesheet" href="css/style.css?v=202611101228">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" media="print" onload="this.media='all'">
+  <link rel="stylesheet" href="css/style.css?v=202611101237">
 </head>
 <body>
+  <!-- Набор иконок: линейные значки, цвет берётся от текста кнопки -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+    <symbol id="i-print" viewBox="0 0 24 24"><path d="M6 9V3h12v6"/><rect x="6" y="14" width="12" height="7" rx="1"/><path d="M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07l1.5-1.5"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7z"/></symbol>
+    <symbol id="i-rec" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></symbol>
+    <symbol id="i-rotate" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></symbol>
+    <symbol id="i-flip" viewBox="0 0 24 24"><path d="M12 3v18"/><path d="M8 7 3 12l5 5V7z"/><path d="m16 7 5 5-5 5V7z"/></symbol>
+    <symbol id="i-flipv" viewBox="0 0 24 24"><path d="M3 12h18"/><path d="m7 8 5-5 5 5H7z"/><path d="m7 16 5 5 5-5H7z"/></symbol>
+    <symbol id="i-swap" viewBox="0 0 24 24"><path d="M7 4 3 8l4 4"/><path d="M3 8h14"/><path d="m17 12 4 4-4 4"/><path d="M21 16H7"/></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></symbol>
+    <symbol id="i-ext" viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></symbol>
+    <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></symbol>
+    <symbol id="i-redo" viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4v16l13-8L7 4z" fill="currentColor"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor"/><rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor"/></symbol>
+    <symbol id="i-prev" viewBox="0 0 24 24"><path d="M19 20 9 12l10-8v16z" fill="currentColor"/><path d="M5 5v14"/></symbol>
+    <symbol id="i-next" viewBox="0 0 24 24"><path d="m5 4 10 8-10 8V4z" fill="currentColor"/><path d="M19 5v14"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="m19 6-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m8 12 3 3 5-6"/></symbol>
+    <symbol id="i-warn" viewBox="0 0 24 24"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+    <symbol id="i-block" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/></symbol>
+    <symbol id="i-cube" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4a2 2 0 0 0 1-1.7z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></symbol>
+    <symbol id="i-save" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path d="M14 2v6h6"/></symbol>
+  </defs></svg>
   <header class="top">
     <a class="brand" href="https://wirkenrus.com" target="_blank" rel="noopener" title="wirkenrus.com">
-      <img class="brand-logo logo-light" src="img/logo.png?v=202611101228" alt="wirken" width="351" height="67">
-      <img class="brand-logo logo-dark" src="img/logo-dark.png?v=202611101228" alt="wirken" width="351" height="67">
+      <img class="brand-logo logo-light" src="img/logo.png?v=202611101237" alt="wirken" width="351" height="67">
+      <img class="brand-logo logo-dark" src="img/logo-dark.png?v=202611101237" alt="wirken" width="351" height="67">
       <h1 class="sr-only">Листогиб — симулятор гибки</h1>
     </a>
     <nav class="tabs">
@@ -26,7 +59,7 @@
       <button type="button" data-tab="table">Таблица усилий</button>
     </nav>
     <a class="hdr-phone" href="tel:+79626965974" title="Позвонить, если возникли вопросы">
-      <span class="hdr-q">Вопросы?</span> +7 962 696-59-74
+      <svg class="ic" aria-hidden="true"><use href="#i-phone"/></svg><span class="hdr-q">Вопросы?</span> +7 962 696-59-74
     </a>
   </header>
 
@@ -40,9 +73,9 @@
           <input type="search" id="punchSearch" class="side-search" placeholder="Поиск: TOP.205, 88, R08, гусак…" aria-label="Поиск пуансона">
           <div id="punchSide" class="side-list"></div>
           <div class="row">
-            <button type="button" id="punchNew">+ Копия</button>
-            <button type="button" id="punchDxfBtn" title="Загрузить профиль своего пуансона из чертежа DXF">⬆ Свой DXF</button>
-            <button type="button" class="ghost" id="punchDel">Удалить</button>
+            <button type="button" id="punchNew"><svg class="ic" aria-hidden="true"><use href="#i-copy"/></svg>Копия</button>
+            <button type="button" id="punchDxfBtn" title="Загрузить профиль своего пуансона из чертежа DXF"><svg class="ic" aria-hidden="true"><use href="#i-upload"/></svg>Свой DXF</button>
+            <button type="button" class="ghost" id="punchDel"><svg class="ic" aria-hidden="true"><use href="#i-trash"/></svg>Удалить</button>
             <input type="file" id="punchDxf" accept=".dxf,.DXF" hidden>
           </div>
         </aside>
@@ -84,11 +117,11 @@
             <div class="row between">
               <h2>Деталь</h2>
               <div class="row">
-                <button type="button" id="segUndo" title="Отменить последнее действие (Ctrl+Z)">↶ Отменить</button>
-                <button type="button" id="segRedo" title="Вернуть отменённое (Ctrl+Y)">↷ Вернуть</button>
-                <button type="button" id="segMirror" title="Зеркальная деталь: левая ↔ правая">⇋ Зеркально</button>
-                <button type="button" class="ghost" id="segClear">Очистить</button>
-                <button type="button" class="primary" id="goBend">▶ Гнуть</button>
+                <button type="button" id="segUndo" title="Отменить последнее действие (Ctrl+Z)"><svg class="ic" aria-hidden="true"><use href="#i-undo"/></svg>Отменить</button>
+                <button type="button" id="segRedo" title="Вернуть отменённое (Ctrl+Y)"><svg class="ic" aria-hidden="true"><use href="#i-redo"/></svg>Вернуть</button>
+                <button type="button" id="segMirror" title="Зеркальная деталь: левая ↔ правая"><svg class="ic" aria-hidden="true"><use href="#i-flip"/></svg>Зеркально</button>
+                <button type="button" class="ghost" id="segClear"><svg class="ic" aria-hidden="true"><use href="#i-trash"/></svg>Очистить</button>
+                <button type="button" class="primary" id="goBend"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg>Гнуть</button>
               </div>
             </div>
             <p class="muted small">Нажмите на точку детали (начало, изгиб или конец), чтобы достраивать от неё. Направление любого отрезка можно поменять в списке.</p>
@@ -127,10 +160,10 @@
             <div class="row between">
               <h2>Симуляция гибки</h2>
               <div class="row" id="simActions">
-                <button type="button" id="printBtn" title="Лист для оператора: деталь, развёртка, инструмент и порядок гибов">🖨 Карта гибки</button>
-                <button type="button" id="recBtn" title="Записать гибку в видеофайл (3D-вид), чтобы переслать">⏺ Видео</button>
-                <button type="button" id="shareBtn" title="Ссылка, по которой откроется только эта гибка">🔗 Поделиться</button>
-                <button type="button" id="reqBtn" title="Отправить в wirken запрос на подобранный инструмент">✉ Заявка в wirken</button>
+                <button type="button" id="printBtn" title="Лист для оператора: деталь, развёртка, инструмент и порядок гибов"><svg class="ic" aria-hidden="true"><use href="#i-print"/></svg>Карта гибки</button>
+                <button type="button" id="recBtn" title="Записать гибку в видеофайл (3D-вид), чтобы переслать"><svg class="ic" aria-hidden="true"><use href="#i-rec"/></svg>Видео</button>
+                <button type="button" id="shareBtn" title="Ссылка, по которой откроется только эта гибка"><svg class="ic" aria-hidden="true"><use href="#i-link"/></svg>Поделиться</button>
+                <button type="button" id="reqBtn" title="Отправить в wirken запрос на подобранный инструмент"><svg class="ic" aria-hidden="true"><use href="#i-send"/></svg>Заявка в wirken</button>
               </div>
             </div>
             <div id="simPanel" class="sim-panel" hidden></div>
@@ -147,14 +180,14 @@
               </div>
             </div>
             <div class="player">
-              <button type="button" id="simPrev" title="Предыдущий шаг">⏮</button>
-              <button type="button" id="simPlay" class="primary">▶ Гнуть</button>
-              <button type="button" id="simNext" title="Следующий шаг">⏭</button>
+              <button type="button" id="simPrev" title="Предыдущий шаг" aria-label="Предыдущий шаг"><svg class="ic" aria-hidden="true"><use href="#i-prev"/></svg></button>
+              <button type="button" id="simPlay" class="primary"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg>Гнуть</button>
+              <button type="button" id="simNext" title="Следующий шаг" aria-label="Следующий шаг"><svg class="ic" aria-hidden="true"><use href="#i-next"/></svg></button>
               <input type="range" id="simSlider" min="0" max="1000" value="0" aria-label="Позиция">
               <select id="simSpeed" aria-label="Скорость">
                 <option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option>
               </select>
-              <button type="button" id="sim3dBtn" title="Объёмный вид гибки: крутить — тянуть, приближать — колесом или двумя пальцами">3D</button>
+              <button type="button" id="sim3dBtn" title="Объёмный вид гибки: крутить — тянуть, приближать — колесом или двумя пальцами"><svg class="ic" aria-hidden="true"><use href="#i-cube"/></svg>3D</button>
               <select id="simZoom" aria-label="Масштаб">
                 <option value="close" selected>Крупно</option><option value="all">Весь станок</option>
               </select>
@@ -175,9 +208,9 @@
       <div class="grid">
         <div class="card wide">
           <div class="row between"><h2>Матрицы</h2>
-            <div class="row"><button type="button" id="dieNew">+ Копия</button>
-              <button type="button" id="dieDxfBtn" title="Загрузить профиль своей матрицы из чертежа DXF">⬆ Свой DXF</button>
-              <button type="button" class="ghost" id="dieDel">Удалить</button>
+            <div class="row"><button type="button" id="dieNew"><svg class="ic" aria-hidden="true"><use href="#i-copy"/></svg>Копия</button>
+              <button type="button" id="dieDxfBtn" title="Загрузить профиль своей матрицы из чертежа DXF"><svg class="ic" aria-hidden="true"><use href="#i-upload"/></svg>Свой DXF</button>
+              <button type="button" class="ghost" id="dieDel"><svg class="ic" aria-hidden="true"><use href="#i-trash"/></svg>Удалить</button>
               <input type="file" id="dieDxf" accept=".dxf,.DXF" hidden></div></div>
           <div class="side-layout">
             <div>
@@ -205,7 +238,7 @@
           <p class="muted small">Всё хранится в этом браузере. Чтобы перенести на другой компьютер или телефон: «Показать копию» → скопировать текст → на другом устройстве вставить его в поле и нажать «Загрузить из текста».</p>
           <div class="row">
             <button type="button" id="exportBtn">Показать копию</button>
-            <button type="button" id="copyBtn" hidden>Копировать</button>
+            <button type="button" id="copyBtn" hidden><svg class="ic" aria-hidden="true"><use href="#i-copy"/></svg>Копировать</button>
             <button type="button" id="importTextBtn">Загрузить из текста</button>
             <button type="button" id="importBtn">Загрузить из файла</button>
             <button type="button" class="ghost" id="resetBtn">Очистить «Мои»</button>
@@ -235,28 +268,30 @@
   </main>
 
   <aside class="contact" aria-label="Контакты">
-    <div class="contact-t">Возникли вопросы?</div>
-    <div class="contact-row">
-      <a class="contact-btn" href="tel:+79626965974"><span aria-hidden="true">☎</span> +7 962 696-59-74</a>
-      <a class="contact-btn ghost" href="https://wirkenrus.com" target="_blank" rel="noopener"><span aria-hidden="true">↗</span> wirkenrus.com</a>
+    <div class="contact-in">
+      <div><div class="contact-t">Возникли вопросы по инструменту?</div><div class="contact-s">Подскажем по пуансонам, матрицам и подбору под вашу деталь.</div></div>
+      <div class="contact-row">
+        <a class="contact-btn" href="tel:+79626965974"><svg class="ic" aria-hidden="true"><use href="#i-phone"/></svg>+7 962 696-59-74</a>
+        <a class="contact-btn ghost" href="https://wirkenrus.com" target="_blank" rel="noopener">wirkenrus.com<svg class="ic" aria-hidden="true"><use href="#i-ext"/></svg></a>
+      </div>
     </div>
   </aside>
-  <footer class="foot"><b>ЛИСТОГИБ</b> · расчёт развёртки и симуляция гибки на листогибочном прессе · <a href="https://wirkenrus.com" target="_blank" rel="noopener">wirkenrus.com</a> · <a href="tel:+79626965974">+7 962 696-59-74</a> · <span id="appVer" class="app-ver"></span></footer>
+  <footer class="foot"><b>Листогиб</b> · расчёт развёртки и симуляция гибки на листогибочном прессе · <a href="https://wirkenrus.com" target="_blank" rel="noopener">wirkenrus.com</a> · <a href="tel:+79626965974">+7 962 696-59-74</a> · <span id="appVer" class="app-ver"></span></footer>
 
   <div id="toast" class="toast"></div>
   <div id="printCard" class="print-card"></div>
 
   <!-- three.js (3D-вид пуансона) подгружается только при открытии 3D — см. ensureThree в js/ui.js -->
-  <script src="js/data.js?v=202611101228"></script>
-  <script src="js/catalog.js?v=202611101228"></script>
-  <script src="js/catalog-dxf.js?v=202611101228"></script>
-  <script src="js/catalog-dies.js?v=202611101228"></script>
-  <script src="js/geom.js?v=202611101228"></script>
-  <script src="js/dxf.js?v=202611101228"></script>
-  <script src="js/calc.js?v=202611101228"></script>
-  <script src="js/svg.js?v=202611101228"></script>
-  <script src="js/sim.js?v=202611101228"></script>
-  <script src="js/view3d.js?v=202611101228"></script>
-  <script src="js/ui.js?v=202611101228"></script>
+  <script src="js/data.js?v=202611101237"></script>
+  <script src="js/catalog.js?v=202611101237"></script>
+  <script src="js/catalog-dxf.js?v=202611101237"></script>
+  <script src="js/catalog-dies.js?v=202611101237"></script>
+  <script src="js/geom.js?v=202611101237"></script>
+  <script src="js/dxf.js?v=202611101237"></script>
+  <script src="js/calc.js?v=202611101237"></script>
+  <script src="js/svg.js?v=202611101237"></script>
+  <script src="js/sim.js?v=202611101237"></script>
+  <script src="js/view3d.js?v=202611101237"></script>
+  <script src="js/ui.js?v=202611101237"></script>
 </body>
 </html>
