@@ -417,3 +417,5 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 #sim3dBtn { font-weight: 700; min-width: 48px; }
 #sim3dBtn.on { background: linear-gradient(180deg, var(--accent) 0%, var(--accent-2) 100%); color: #fff; border-color: var(--accent-2); }
 .mag-ov[hidden], #sim3d[hidden], #simZoom[hidden] { display: none; }
+
+#recBtn.rec { background: var(--red); color: #fff; border-color: var(--red); }

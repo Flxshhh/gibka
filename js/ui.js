@@ -1162,6 +1162,7 @@
         });
         return;
       }
+      if (e.target.id === 'recBtn') { recordVideo(); return; }
       if (e.target.id === 'printBtn') { printCard(); return; }
       if (e.target.id === 'shareBtn') { sharePanel(); return; }
       if (e.target.id === 'reqBtn') { requestPanel(); return; }
@@ -1243,13 +1244,13 @@
       if (this.t >= this.total() - 1e-6) this.t = 0;
       this.playing = true; this.last = performance.now(); updateBtn(); requestAnimationFrame(tick);
     },
-    pause() { this.playing = false; updateBtn(); }
+    pause() { this.playing = false; updateBtn(); stopRec(); }
   };
   function tick(now) {
     if (!PLAYER.playing) return;
     PLAYER.t += Math.max(0, now - PLAYER.last) / 1000 * PLAYER.speed;  // метка кадра может быть раньше нажатия
     PLAYER.last = now;
-    if (PLAYER.t >= PLAYER.total()) { PLAYER.t = PLAYER.total(); PLAYER.playing = false; updateBtn(); }
+    if (PLAYER.t >= PLAYER.total()) { PLAYER.t = PLAYER.total(); PLAYER.playing = false; updateBtn(); stopRec(); }
     drawFrame();
     if (PLAYER.playing) requestAnimationFrame(tick);
   }
@@ -1386,7 +1387,7 @@
   // Те же контуры, что и на плоской картинке, вытянутые на длину гиба. Инструмент строится один раз на деталь,
   // пуансон двигается, лист перестраивается каждый кадр.
   let sim3d = null;
-  function set3d(on) {
+  function set3d(on, then) {
     PLAYER.d3 = on;
     $('#sim3dBtn').classList.toggle('on', on);
     $('#sim3dBtn').textContent = on ? '2D' : '3D';
@@ -1397,10 +1398,49 @@
     if (!sim3d && typeof THREE === 'undefined') $('#sim3d').innerHTML = '<p class="muted pad">Загружаю 3D…</p>';
     ensureThree(() => {
       if (!sim3d) { $('#sim3d').innerHTML = ''; sim3d = new LG.View3D($('#sim3d')); sim3d.theta = -0.75; sim3d.phi = 1.2; }
-      if (sim3d.ok) sim3d.key = null;
-      else { PLAYER.d3 = false; $('#sim3dBtn').classList.remove('on'); $('#sim3dBtn').textContent = '3D'; $('.mag-ov').hidden = false; $('#simZoom').hidden = false; }
+      if (!sim3d.ok) { sim3d = null; set3d(false); toast('3D недоступно: не загрузилась библиотека (нужен интернет)', 4000); return; }   // возвращаем плоский вид
+      sim3d.key = null;
       drawFrame();
+      if (then) then();
     });
+  }
+
+  // Запись видео гибки: 3D-вид проигрывается с начала и пишется в файл (mp4 или webm — что умеет браузер)
+  function stopRec() {
+    const r = PLAYER.rec; if (!r) return;
+    PLAYER.rec = null;
+    setTimeout(() => { if (r.state !== 'inactive') r.stop(); }, 300);   // дать дописать последний кадр
+  }
+  function recordVideo() {
+    if (PLAYER.rec) { PLAYER.pause(); return; }
+    if (!PLAYER.plan || !PLAYER.plan.steps.length) { toast('Сначала нужна деталь с гибами'); return; }
+    const go = () => {
+      const cv = $('#sim3d canvas');
+      if (!cv || !cv.captureStream || typeof MediaRecorder === 'undefined') { toast('Этот браузер не умеет записывать видео — воспользуйтесь записью экрана телефона', 5000); return; }
+      const mime = ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm'].find(m => MediaRecorder.isTypeSupported(m));
+      let rec;
+      try { rec = new MediaRecorder(cv.captureStream(30), mime ? { mimeType: mime, videoBitsPerSecond: 5e6 } : undefined); }
+      catch (err) { toast('Запись видео не запустилась: ' + err.message, 5000); return; }
+      const chunks = [], btn = $('#recBtn'), bg = sim3d.scene.background;
+      sim3d.scene.background = new THREE.Color(0xffffff);   // у холста прозрачный фон — в видео он был бы чёрным
+      rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+      rec.onstop = () => {
+        sim3d.scene.background = bg; sim3d.render();
+        btn.textContent = '⏺ Видео'; btn.classList.remove('rec');
+        if (!chunks.length) { toast('Видео не записалось', 4000); return; }
+        const type = rec.mimeType || mime || 'video/webm', a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob(chunks, { type }));
+        a.download = (ST.part.name || 'гибка').replace(/[\\/:*?"<>|]+/g, ' ').trim() + (/mp4/.test(type) ? '.mp4' : '.webm');
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+        toast('Видео сохранено: ' + a.download, 4000);
+      };
+      PLAYER.pause(); PLAYER.t = 0; drawFrame();
+      PLAYER.rec = rec; rec.start();
+      btn.textContent = '⏹ Стоп'; btn.classList.add('rec');
+      PLAYER.play();
+    };
+    if (PLAYER.d3 && sim3d && sim3d.ok) go(); else set3d(true, go);
   }
   function draw3d(sim, s, sheet, tip, hits, showStop) {
     const v = sim3d;

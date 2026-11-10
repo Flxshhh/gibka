@@ -9,13 +9,13 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <!-- шрифты подгружаются, не задерживая страницу: пока их нет, текст виден системным шрифтом -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Oswald:wght@500;600&family=PT+Sans:wght@400;700&display=swap" media="print" onload="this.media='all'">
-  <link rel="stylesheet" href="css/style.css?v=202611100645">
+  <link rel="stylesheet" href="css/style.css?v=202611100647">
 </head>
 <body>
   <header class="top">
     <a class="brand" href="https://wirkenrus.com" target="_blank" rel="noopener" title="wirkenrus.com">
-      <img class="brand-logo logo-light" src="img/logo.png?v=202611100645" alt="wirken" width="351" height="67">
-      <img class="brand-logo logo-dark" src="img/logo-dark.png?v=202611100645" alt="wirken" width="351" height="67">
+      <img class="brand-logo logo-light" src="img/logo.png?v=202611100647" alt="wirken" width="351" height="67">
+      <img class="brand-logo logo-dark" src="img/logo-dark.png?v=202611100647" alt="wirken" width="351" height="67">
       <h1 class="sr-only">Листогиб — симулятор гибки</h1>
     </a>
     <nav class="tabs">
@@ -128,6 +128,7 @@
               <h2>Симуляция гибки</h2>
               <div class="row" id="simActions">
                 <button type="button" id="printBtn" title="Лист для оператора: деталь, развёртка, инструмент и порядок гибов">🖨 Карта гибки</button>
+                <button type="button" id="recBtn" title="Записать гибку в видеофайл (3D-вид), чтобы переслать">⏺ Видео</button>
                 <button type="button" id="shareBtn" title="Ссылка, по которой откроется только эта гибка">🔗 Поделиться</button>
                 <button type="button" id="reqBtn" title="Отправить в wirken запрос на подобранный инструмент">✉ Заявка в wirken</button>
               </div>
@@ -245,16 +246,16 @@
   <div id="printCard" class="print-card"></div>
 
   <!-- three.js (3D-вид пуансона) подгружается только при открытии 3D — см. ensureThree в js/ui.js -->
-  <script src="js/data.js?v=202611100645"></script>
-  <script src="js/catalog.js?v=202611100645"></script>
-  <script src="js/catalog-dxf.js?v=202611100645"></script>
-  <script src="js/catalog-dies.js?v=202611100645"></script>
-  <script src="js/geom.js?v=202611100645"></script>
-  <script src="js/dxf.js?v=202611100645"></script>
-  <script src="js/calc.js?v=202611100645"></script>
-  <script src="js/svg.js?v=202611100645"></script>
-  <script src="js/sim.js?v=202611100645"></script>
-  <script src="js/view3d.js?v=202611100645"></script>
-  <script src="js/ui.js?v=202611100645"></script>
+  <script src="js/data.js?v=202611100647"></script>
+  <script src="js/catalog.js?v=202611100647"></script>
+  <script src="js/catalog-dxf.js?v=202611100647"></script>
+  <script src="js/catalog-dies.js?v=202611100647"></script>
+  <script src="js/geom.js?v=202611100647"></script>
+  <script src="js/dxf.js?v=202611100647"></script>
+  <script src="js/calc.js?v=202611100647"></script>
+  <script src="js/svg.js?v=202611100647"></script>
+  <script src="js/sim.js?v=202611100647"></script>
+  <script src="js/view3d.js?v=202611100647"></script>
+  <script src="js/ui.js?v=202611100647"></script>
 </body>
 </html>
