@@ -1225,6 +1225,7 @@
     }, { passive: false });
     $('#simSvg').addEventListener('dblclick', () => setMag(1));
     $$('.mag-btn').forEach(bt => bt.addEventListener('click', () => setMag(PLAYER.mag * +bt.dataset.mag)));
+    $('#sim3dBtn').addEventListener('click', () => set3d(!PLAYER.d3));
     $('#simZoom').addEventListener('change', e => {
       PLAYER.zoom = e.target.value;
       if (PLAYER.sim && PLAYER.plan) PLAYER.view = computeView(PLAYER.sim, PLAYER.plan);
@@ -1381,6 +1382,50 @@
 
   const ease = x => x < 0 ? 0 : x > 1 ? 1 : x * x * (3 - 2 * x);
 
+  // ---------- 3D-вид гибки ----------
+  // Те же контуры, что и на плоской картинке, вытянутые на длину гиба. Инструмент строится один раз на деталь,
+  // пуансон двигается, лист перестраивается каждый кадр.
+  let sim3d = null;
+  function set3d(on) {
+    PLAYER.d3 = on;
+    $('#sim3dBtn').classList.toggle('on', on);
+    $('#sim3dBtn').textContent = on ? '2D' : '3D';
+    $('#simSvg').toggleAttribute('hidden', on);
+    $('#sim3d').hidden = !on;
+    $('.mag-ov').hidden = on; $('#simZoom').hidden = on;
+    if (!on) { drawFrame(); return; }
+    if (!sim3d && typeof THREE === 'undefined') $('#sim3d').innerHTML = '<p class="muted pad">Загружаю 3D…</p>';
+    ensureThree(() => {
+      if (!sim3d) { $('#sim3d').innerHTML = ''; sim3d = new LG.View3D($('#sim3d')); sim3d.theta = -0.75; sim3d.phi = 1.2; }
+      if (sim3d.ok) sim3d.key = null;
+      else { PLAYER.d3 = false; $('#sim3dBtn').classList.remove('on'); $('#sim3dBtn').textContent = '3D'; $('.mag-ov').hidden = false; $('#simZoom').hidden = false; }
+      drawFrame();
+    });
+  }
+  function draw3d(sim, s, sheet, tip, hits, showStop) {
+    const v = sim3d;
+    if (!v || !v.ok) return false;
+    const L = Math.max(50, Math.min(4000, +ST.part.L || 1000)), Lt = L * 1.08, m = ST.machine, H = sim.punchInfo.H;
+    const moving = ['punch', 'tang', 'holder'];
+    if (v.key !== PLAYER.key) {
+      v.key = PLAYER.key;
+      v.setPart('pad', sim.pad, Lt, { color: 0xc4cad2, edges: true, metal: 0.2 });
+      v.setPart('die', sim.die.poly, Lt, { color: 0x8d97a3, edges: true });
+      v.setPart('punch', sim.punchLocal, Lt, { color: 0x9aa3ad, edges: true });
+      v.setPart('tang', sim.tangLocal, Lt, { color: 0x9aa3ad, edges: true });
+      v.setPart('holder', G.rect(sim.tangCx - m.holderW / 2, H, sim.tangCx + m.holderW / 2, H + Math.min(m.holderH, 70)), Lt, { color: 0xc4cad2, edges: true, metal: 0.2 });
+      moving.forEach(n => { v.parts[n].position.y = PLAYER.openY || sim.tipOpen; });
+      v.setPart('sheet', sheet, L, { color: 0xf0b429, metal: 0.15 });
+      v.setPart('gauge', null);
+      v.fit(1.45);
+    }
+    moving.forEach(n => { v.parts[n].position.y = tip; });
+    v.setPart('sheet', sheet, L, { color: hits.length ? 0xff3b30 : 0xf0b429, metal: 0.15, edges: true, edgeColor: hits.length ? 0x8a0f0a : 0x9a6a00 });
+    v.setPart('gauge', showStop && s.stop != null ? G.rect(s.stop, sim.dieTop - 6, s.stop + 8, sim.dieTop + ST.part.S + 18) : null, Math.min(L, 160), { color: 0xc98a2b, edges: true });
+    v.render();
+    return true;
+  }
+
   function drawFrame() {
     const svg = $('#simSvg'), hud = $('#simHud'), slider = $('#simSlider');
     const sim = PLAYER.sim, plan = PLAYER.plan;
@@ -1420,19 +1465,21 @@
     }
     const fs = (v.y1 - v.y0) / 32;
 
-    let h = SV.path(sim.table, 'm-table' + cls('стол')) + SV.path(sim.pad, 'm-pad' + cls('подложка')) +
-      SV.path(sim.die.poly, 'm-die' + cls('матрица')) + SV.line({ x: 0, y: v.y0 }, { x: 0, y: v.y1 }, 'axis');
-    if (s.stop != null && slide === 0 && u < 0.8) {
-      const y = sim.dieTop;
-      h += SV.path(G.rect(s.stop, y - fs * 0.4, s.stop + fs * 0.45, y + ST.part.S + fs * 1.2), 'gauge');
-      h += SV.text({ x: s.stop + fs * 0.25, y: y - fs * 0.9 }, 'упор ' + fmt(s.stop, 1), fs * 0.6, 'lbl-s');
+    if (!(PLAYER.d3 && draw3d(sim, s, sheet, tip, hits, slide === 0 && u < 0.8))) {
+      let h = SV.path(sim.table, 'm-table' + cls('стол')) + SV.path(sim.pad, 'm-pad' + cls('подложка')) +
+        SV.path(sim.die.poly, 'm-die' + cls('матрица')) + SV.line({ x: 0, y: v.y0 }, { x: 0, y: v.y1 }, 'axis');
+      if (s.stop != null && slide === 0 && u < 0.8) {
+        const y = sim.dieTop;
+        h += SV.path(G.rect(s.stop, y - fs * 0.4, s.stop + fs * 0.45, y + ST.part.S + fs * 1.2), 'gauge');
+        h += SV.text({ x: s.stop + fs * 0.25, y: y - fs * 0.9 }, 'упор ' + fmt(s.stop, 1), fs * 0.6, 'lbl-s');
+      }
+      h += SV.path(t.beam, 'm-beam' + cls('балка')) + SV.path(t.holder, 'm-holder' + cls('зажим пуансона')) +
+        SV.path(t.tang, 'm-tang') + SV.path(t.punch, 'm-punch' + cls('пуансон')) +
+        SV.path(sheet, 'sheet' + (hits.length ? ' hit' : '')) + SV.path(face, 'faceUp', false);
+      hits.forEach(x => x.hits.forEach(p => { h += SV.circle(p, fs * 0.35, 'hitpt'); }));
+      svg.setAttribute('viewBox', SV.viewBox(v, 4 / mag));
+      svg.innerHTML = h;
     }
-    h += SV.path(t.beam, 'm-beam' + cls('балка')) + SV.path(t.holder, 'm-holder' + cls('зажим пуансона')) +
-      SV.path(t.tang, 'm-tang') + SV.path(t.punch, 'm-punch' + cls('пуансон')) +
-      SV.path(sheet, 'sheet' + (hits.length ? ' hit' : '')) + SV.path(face, 'faceUp', false);
-    hits.forEach(x => x.hits.forEach(p => { h += SV.circle(p, fs * 0.35, 'hitpt'); }));
-    svg.setAttribute('viewBox', SV.viewBox(v, 4 / mag));
-    svg.innerHTML = h;
 
     const b = R.an.bends[s.bend];
     hud.innerHTML = '<div class="hud-t">Шаг ' + (k + 1) + ' из ' + n + ' · Гиб Г' + (s.bend + 1) + ' на ' + fmt(b.incl, 0) + '° · <span class="muted">' + phase + '</span></div>' +

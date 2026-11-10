@@ -412,3 +412,8 @@ button:disabled { opacity: .5; cursor: not-allowed; }
   .pc-notes { margin: 0; padding-left: 18px; }
   .pc-foot { margin-top: 12px; padding-top: 6px; border-top: 1px solid #ccc; color: #555; font-size: 9pt; }
 }
+
+/* 3D-вид гибки */
+#sim3dBtn { font-weight: 700; min-width: 48px; }
+#sim3dBtn.on { background: linear-gradient(180deg, var(--accent) 0%, var(--accent-2) 100%); color: #fff; border-color: var(--accent-2); }
+.mag-ov[hidden], #sim3d[hidden], #simZoom[hidden] { display: none; }
