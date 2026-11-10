@@ -1086,11 +1086,19 @@
       (p.segs.length ? 'Гибка: ' + shareUrl() + '\n' : '') + 'Прошу сообщить наличие и стоимость.';
     $('#simPanel').hidden = false;
     $('#simPanel').innerHTML = '<div class="row between"><b>Заявка в wirken</b><button type="button" class="ghost sm" id="panelClose">✕</button></div>' +
-      '<p class="muted small">Текст можно поправить. Потом отправьте его в WhatsApp или скопируйте и пришлите любым удобным способом.</p>' +
+      '<p class="muted small">Текст можно поправить. <b>Telegram</b> откроет чат с номером +7 962 696-59-74 и подставит текст — останется нажать «Отправить». ' +
+      'В <b>MAX</b> ссылок с готовым текстом нет: кнопка скопирует текст, а в MAX найдите контакт по номеру (Контакты → + → «Найти по номеру») и вставьте его.</p>' +
       '<textarea id="panelText" class="backup" rows="7">' + esc(txt) + '</textarea>' +
-      '<div class="row"><a class="link-btn primary" id="panelWa" href="#" target="_blank" rel="noopener">Отправить в WhatsApp</a>' +
+      '<div class="row"><a class="link-btn primary" id="panelTg" href="#" target="_blank" rel="noopener">Отправить в Telegram</a>' +
+      '<button type="button" id="panelMax">MAX: скопировать текст и номер</button>' +
       '<button type="button" id="panelCopy">Скопировать текст</button><a class="link-btn" href="tel:+79626965974">☎ +7 962 696-59-74</a></div>';
-    const upd = () => { $('#panelWa').href = 'https://wa.me/79626965974?text=' + encodeURIComponent($('#panelText').value); };
+    // Telegram: t.me/+номер?text=… — черновик сообщения в чате с этим номером. Слишком длинная ссылка обрезается, поэтому
+    // если текст с адресом гибки не помещается, адрес из черновика убираем (он остаётся в поле и копируется кнопкой).
+    const upd = () => {
+      let t = $('#panelText').value;
+      if (encodeURIComponent(t).length > 3500) t = t.split('\n').filter(l => l.indexOf('Гибка: ') !== 0).join('\n');
+      $('#panelTg').href = 'https://t.me/+79626965974?text=' + encodeURIComponent(t).slice(0, 3800);
+    };
     upd(); $('#panelText').addEventListener('input', upd);
   }
 
@@ -1168,6 +1176,7 @@
       if (e.target.id === 'reqBtn') { requestPanel(); return; }
       if (e.target.id === 'panelClose') { $('#simPanel').hidden = true; return; }
       if (e.target.id === 'panelCopy') { copyText($('#panelText').value, 'Скопировано'); return; }
+      if (e.target.id === 'panelMax') { copyText($('#panelText').value, 'Текст скопирован. В MAX найдите по номеру +7 962 696-59-74 и вставьте'); return; }
       if (e.target.id === 'panelShare') { navigator.share({ title: 'Листогиб: ' + ST.part.name, url: $('#panelText').value }).catch(() => {}); return; }
       const sug = e.target.closest('[data-sugdie]');
       if (sug) {
