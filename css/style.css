@@ -112,7 +112,7 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 .hdr-phone:hover { border-color: var(--accent-soft); background: var(--accent-tint); }
 .hdr-q { font-weight: 500; color: var(--muted); }
 @media (max-width: 1500px) { .hdr-q { display: none; } }
-@media (max-width: 680px) { .hdr-phone { margin-left: 0; } .top { position: static; gap: 10px; } .brand-logo { height: 30px; } .tabs button { padding: 8px 10px; font-size: 13.5px; } }
+
 
 main { padding-block: 18px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); max-width: 1400px; margin: 0 auto; }
 
@@ -423,4 +423,47 @@ thead th { font: 600 11.5px var(--f-body); text-transform: uppercase; letter-spa
   .pc-warn { border: 1px solid #c00; color: #c00; padding: 5px 8px; margin-bottom: 6px; font-weight: 600; }
   .pc-notes { margin: 0; padding-left: 18px; }
   .pc-foot { margin-top: 12px; padding-top: 6px; border-top: 1px solid #ccc; color: #555; font-size: 8.5pt; }
+}
+
+/* ---------- Закреплённая навигация и панель добавления отрезков ---------- */
+/* Компьютер: в конструкторе левая колонка (лист, добавление) остаётся на экране, пока листаешь деталь */
+@media (min-width: 861px) {
+  #tab-part .side-layout > aside { position: sticky; top: calc(72px + env(safe-area-inset-top, 0px)); max-height: calc(100vh - 88px); overflow-y: auto; scrollbar-width: thin; }
+}
+/* Телефон: шапка в две строки и всегда сверху; вкладки листаются вбок */
+@media (max-width: 860px) {
+  .top { position: sticky; top: env(safe-area-inset-top, 0px); gap: 6px 10px; padding-block: 6px; flex-wrap: wrap; justify-content: space-between; }
+  .brand-logo { height: 26px; }
+  .hdr-phone { margin-left: auto; padding: 5px 10px; font-size: 13px; min-height: 0; }
+  .tabs { order: 3; width: 100%; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; gap: 2px; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tabs button { flex: none; min-height: 34px; padding: 6px 11px; font-size: 13.5px; white-space: nowrap; }
+  .card { scroll-margin-top: calc(96px + env(safe-area-inset-top, 0px)); }
+
+  /* конструктор: сначала деталь с чертежом, а кнопки добавления — панелью внизу экрана, всегда под рукой */
+  #tab-part .side-layout > aside { order: 2; }
+  #addCard { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; margin: 0; border-radius: 14px 14px 0 0; border: 1px solid var(--line-2); border-bottom: 0;
+    padding: 10px max(12px, env(safe-area-inset-right, 0px)) calc(10px + env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px)); box-shadow: 0 -8px 24px rgba(16, 32, 54, .16); }
+  #addCard h2, #addForm .field label { display: none; }
+  #addForm { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; align-items: center; }
+  #addForm .f-dir, #addForm .f-ang { grid-column: 1 / -1; }
+  #addForm .seg-tabs.wide2 { width: 100%; }
+  #addForm .pad-cross, #addForm .pad4 { grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: auto; gap: 8px; }
+  #addForm .pad-cross .d90, #addForm .pad-cross .d180, #addForm .pad-cross .d0, #addForm .pad-cross .d270 { grid-column: auto; grid-row: auto; }
+  #addForm .pad-cross .d180 { order: 1; }
+  #addForm .pad-cross .d90 { order: 2; }
+  #addForm .pad-cross .d270 { order: 3; }
+  #addForm .pad-cross .d0 { order: 4; }
+  #addForm button.big { min-height: 46px; }
+  #addForm .chips-sel button { min-height: 32px; }
+  body[data-tab="part"] { padding-bottom: calc(190px + env(safe-area-inset-bottom, 0px)); }   /* место под нижнюю панель, чтобы она не закрывала подвал */
+  body[data-tab="part"] .toast { bottom: calc(200px + env(safe-area-inset-bottom, 0px)); }
+  #profileSvg { height: min(46vh, 340px); }
+}
+@media (max-width: 860px) {
+  #addForm .seg-tabs button { padding: 4px 6px; font-size: 13px; white-space: nowrap; }
+  /* шапка карточки «Деталь» покомпактнее, чтобы чертёж был выше */
+  #tab-part .side-stack > .card:first-child > .row.between { gap: 6px; margin-bottom: 8px; }
+  #tab-part .side-stack > .card:first-child > .row.between button { min-height: 32px; padding: 4px 9px; font-size: 13px; }
+  #tab-part .side-stack > .card:first-child > p.muted.small { display: none; }
 }

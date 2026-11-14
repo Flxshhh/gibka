@@ -277,7 +277,8 @@
   function setTab(t) {
     ST.ui.tab = t; saveAll();
     PLAYER.pause();
-    $$('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
+    document.body.dataset.tab = t;   // для стилей: на телефоне у конструктора своя нижняя панель
+    $$('.tabs button').forEach(b => { b.classList.toggle('on', b.dataset.tab === t); if (b.dataset.tab === t && b.scrollIntoView) b.scrollIntoView({ block: 'nearest', inline: 'center' }); });
     $$('.tab').forEach(s => { s.hidden = s.id !== 'tab-' + t; });
     if (t === 'punch') renderPunchTab();
     if (t === 'part') renderPartTab();
@@ -587,23 +588,25 @@
     let h = '<div class="seg-tabs wide2">' +
       '<button type="button" data-segmode="straight" class="' + (u.segMode === 'straight' ? 'on' : '') + '">Без угла</button>' +
       '<button type="button" data-segmode="angle" class="' + (u.segMode === 'angle' ? 'on' : '') + '">С углом</button></div>';
-    h += stepper('ui', 'segLen', u.segLen, 1, 0.1, 2, 'Длина отрезка, мм');
+    h += stepper('ui', 'segLen', u.segLen, 1, 0.1, 2, 'Длина отрезка, мм', 'f-len');
     if (u.segMode === 'angle') {
-      h += '<div class="field"><label>Угол к горизонтали</label><div class="chips-sel">' +
+      h += '<div class="field f-ang"><label>Угол к горизонтали</label><div class="chips-sel">' +
         [30, 45, 60].map(a => '<button type="button" data-segangle="' + a + '" class="' + (u.segAngle === a ? 'on' : '') + '">' + a + '°</button>').join('') + '</div></div>';
-      h += '<div class="field"><label>Направление — нажмите, чтобы добавить</label><div class="pad4">' +
+      h += '<div class="field f-dir"><label>Направление — нажмите, чтобы добавить</label><div class="pad4">' +
         DIAG.map(d => '<button type="button" class="big" data-adddiag="' + d[0] + '" title="' + d[2] + '" aria-label="' + d[2] + '">' + ic('arrow', '', { ul: -45, ur: 45, dl: -135, dr: 135 }[d[0]]) + '</button>').join('') + '</div></div>';
     } else {
-      h += '<div class="field"><label>Направление — нажмите, чтобы добавить</label><div class="pad-cross">' +
+      h += '<div class="field f-dir"><label>Направление — нажмите, чтобы добавить</label><div class="pad-cross">' +
         STRAIGHT.map(d => '<button type="button" class="big d' + d[0] + '" data-adddir="' + d[0] + '" title="' + d[2] + '" aria-label="' + d[2] + '">' + ic('arrow', '', 90 - d[0]) + '</button>').join('') + '</div></div>';
     }
-    h += '<div class="field"><label>Или готовый шаблон</label><select id="presetSel"><option value="">Выбрать…</option>' +
+    $('#addForm').innerHTML = h;
+    // шаблон, строка и чертёж — отдельной карточкой: на телефоне кнопки добавления закреплены внизу экрана и должны быть компактными
+    h = '<div class="field"><label>Готовый шаблон</label><select id="presetSel"><option value="">Выбрать…</option>' +
       Object.keys(PRESETS).map(k => '<option>' + k + '</option>').join('') + '</select></div>';
-    h += '<div class="field"><label>Или строкой: длина, угол гиба, длина…</label><div class="row str-row">' +
+    h += '<div class="field"><label>Строкой: длина, угол гиба, длина…</label><div class="row str-row">' +
       '<input type="text" id="segStr" autocomplete="off" placeholder="30 90 60 -90 30" value="' + esc(partToString()) + '"><button type="button" id="segStrGo">Построить</button></div>' +
       '<div class="muted small">Через пробел: длины, а между ними углы гибов, как на чертеже (90 — прямой угол). Угол с минусом — гиб в другую сторону.</div></div>';
-    h += '<div class="field"><label>Или из чертежа</label><button type="button" id="partDxfBtn" title="Профиль детали: одна линия или замкнутый контур листа">' + ic('upload') + 'Контур детали из DXF</button></div>';
-    $('#addForm').innerHTML = h;
+    h += '<div class="field"><label>Из чертежа</label><button type="button" id="partDxfBtn" title="Профиль детали: одна линия или замкнутый контур листа">' + ic('upload') + 'Контур детали из DXF</button></div>';
+    $('#addExtra').innerHTML = h;
 
     $('#partsForm').innerHTML =
       '<div class="field"><label>Название детали</label><input type="text" id="partName" value="' + esc(p.name || '') + '"></div>' +
