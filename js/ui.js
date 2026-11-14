@@ -1461,7 +1461,7 @@
     let x = pad; const lg = REC.logo;
     g.textBaseline = 'middle';
     if (lg && lg.complete && lg.naturalWidth) { const lh = Math.round(u * 1.15), lw = Math.round(lh * lg.naturalWidth / lg.naturalHeight); g.drawImage(lg, x, Math.round(cy - lh / 2), lw, lh); x += lw + pad; }
-    else { g.fillStyle = '#115398'; g.font = '800 ' + Math.round(u * 1.1) + 'px Manrope, Inter, Arial, sans-serif'; g.textAlign = 'left'; g.fillText('wirken', x, cy); x += g.measureText('wirken').width + pad; }
+    // логотип загружается заранее (см. recLogo); текстом название не пишем
     g.fillStyle = '#115398'; g.font = '600 ' + Math.round(u * 0.8) + 'px Inter, Arial, sans-serif'; g.textAlign = 'right';
     g.fillText('wirkenrus.com', W - pad, cy);
     const siteW = g.measureText('wirkenrus.com').width, nm = (ST.part.name || '').trim();
@@ -1481,7 +1481,7 @@
     const g = c.getContext('2d');
     g.fillStyle = '#ffffff'; g.fillRect(0, 0, c.width, c.height);
     g.drawImage(cv, 0, 0, c.width, c.height);
-    recBar(g, c.width, c.height);
+    recBar(g, c.width, c.height);   // логотип wirken слева, адрес сайта справа
   }
   // 2D: та же гибка, что на экране (с тем же приближением), нарисованная прямо на холсте 1280×720
   function recFrame2d(fr) {
@@ -1537,6 +1537,13 @@
     g.fillText(sub, ax, Math.round(u * 1.95));
     recBar(g, W, H);
   }
+  // Логотип для подписи видео: грузим заранее, при открытии выбора вида, чтобы он был в кадре с первой секунды
+  function recLogo() {
+    if (!REC.logo) { REC.logo = new Image(); REC.logo.src = 'img/logo.png'; }
+    const lg = REC.logo;
+    if (lg.complete && lg.naturalWidth) return Promise.resolve();
+    return new Promise(res => { lg.addEventListener('load', res, { once: true }); lg.addEventListener('error', res, { once: true }); setTimeout(res, 3000); });
+  }
   function recCancel() {
     clearTimeout(REC.timer); REC.timer = null;
     const ov = $('#recCount'); if (ov) ov.remove();
@@ -1547,6 +1554,7 @@
     if (REC.timer) { recCancel(); toast('Запись отменена'); return; }
     if (PLAYER.rec) { PLAYER.pause(); return; }
     if (!PLAYER.plan || !PLAYER.plan.steps.length) { toast('Сначала нужна деталь с гибами'); return; }
+    recLogo();
     $('#simPanel').hidden = false;
     $('#simPanel').innerHTML = '<div class="row between"><b>В каком виде записать видео?</b><button type="button" class="ghost sm" id="panelClose" aria-label="Закрыть">' + ic('x') + '</button></div>' +
       '<div class="row"><button type="button" class="primary" data-recmode="2d">' + ic('rec') + '2D — как на чертеже</button>' +
@@ -1557,7 +1565,6 @@
     $('#simPanel').hidden = true;
     const start = () => {
       if (!REC.canvas) REC.canvas = document.createElement('canvas');
-      if (!REC.logo) { REC.logo = new Image(); REC.logo.src = 'img/logo.png'; }
       const mime = ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm'].find(m => MediaRecorder.isTypeSupported(m));
       const is3d = mode === '3d', unbg = () => { if (is3d && sim3d && sim3d.ok) { sim3d.scene.background = null; sim3d.render(); } };
       REC.mode = mode;
@@ -1596,7 +1603,7 @@
       $('#simCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
       let n = 3;
       const tick = () => {
-        if (n === 0) { REC.timer = null; ov.remove(); start(); return; }
+        if (n === 0) { REC.timer = null; ov.remove(); recLogo().then(() => { if (!PLAYER.rec && $('#recBtn').classList.contains('rec')) start(); }); return; }
         ov.innerHTML = '<b>' + n + '</b><span>Запись начнётся через ' + n + ' с — ' + (mode === '3d' ? 'поверните вид, как нужно' : 'приблизьте вид, как нужно') + '</span>';
         n--; REC.timer = setTimeout(tick, 1000);
       };
