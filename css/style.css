@@ -350,12 +350,6 @@ svg .dim-t { fill: var(--dim); }
 .view-only .tabs, .view-only #toolCard, .view-only #shareBtn, .view-only #reqBtn, .view-only .bends td:last-child, .view-only .bends th:last-child,
 .view-only #orderAuto, .view-only .alts, .view-only [data-sugdie] { display: none !important; }
 
-/* ---------- Пробивка ---------- */
-svg .t-die { fill: none; stroke: var(--tool-edge); stroke-width: 1.2; stroke-dasharray: 5 3; vector-effect: non-scaling-stroke; }
-svg .t-circ { fill: none; stroke: var(--muted); stroke-width: 1; stroke-dasharray: 2 4; vector-effect: non-scaling-stroke; }
-#turretSvg { height: 380px; }
-tr.t-cur td { background: var(--accent-tint); font-weight: 600; }
-
 /* ---------- Таблицы ---------- */
 .tbl-wrap { overflow-x: auto; }
 table { border-collapse: collapse; width: 100%; font-size: 14px; }
@@ -420,6 +414,16 @@ thead th { font: 600 11.5px var(--f-body); text-transform: uppercase; letter-spa
   .pc-steps th { background: #eef2f6; font: 600 9.5pt 'Inter', Arial, sans-serif; text-transform: none; letter-spacing: 0; color: #000; }
   .pc-steps tr { break-inside: avoid; }
   .pc-box { width: 9mm; }
+  .pc-pic { width: 50mm; padding: 2px !important; }
+  .pc-step { display: block; width: 50mm; height: 36mm; }
+  .pc-step .ps-tool { fill: #b9c0c8; stroke: #5f6a75; stroke-width: 1; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+  .pc-step .ps-mach { fill: #e3e7eb; stroke: #9aa3ad; stroke-width: 1; vector-effect: non-scaling-stroke; }
+  .pc-step .ps-sheet { fill: #fff; stroke: #111; stroke-width: 1.6; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+  .pc-step .ps-ghost { fill: none; stroke: #115398; stroke-width: 1.1; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
+  .pc-step .ps-face { fill: none; stroke: #f0a800; stroke-width: 2.2; vector-effect: non-scaling-stroke; }
+  .pc-step .ps-gauge { fill: #b9772a; stroke: none; }
+  .pc-step .ps-t { fill: #333; font-family: 'JetBrains Mono', monospace; }
+  .pc-legend { margin-top: 6px; color: #555; font-size: 8.5pt; }
   .pc-warn { border: 1px solid #c00; color: #c00; padding: 5px 8px; margin-bottom: 6px; font-weight: 600; }
   .pc-notes { margin: 0; padding-left: 18px; }
   .pc-foot { margin-top: 12px; padding-top: 6px; border-top: 1px solid #ccc; color: #555; font-size: 8.5pt; }

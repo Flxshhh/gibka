@@ -34,7 +34,6 @@
     machine: Object.assign(clone(LG.DEFAULT_MACHINE), load('machine', {})),
     parts: load('parts', []),
     part: Object.assign(clone(LG.DEFAULT_PART), load('part', {})),
-    turret: Object.assign({ sys: 'tt', material: 'Fe', S: 1.5, shape: 'round', a: 10, b: 5, ton: 20, qty: 1 }, load('turret', {})),
     ui: Object.assign({ tab: 'part', pview: 'draw', segMode: 'straight', segAngle: 45, segLen: 20, editPunch: null, editDie: null }, load('ui', {}), { punchQ: '', dieQ: '' })
   };
   // Пуансоны старого формата (до схемы WIRKEN) заменяем стандартными
@@ -103,7 +102,7 @@
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
       store('punches', ST.punches); store('dies', ST.dies); store('machine', ST.machine);
-      store('parts', ST.parts); store('part', ST.part); store('ui', ST.ui); store('turret', ST.turret);
+      store('parts', ST.parts); store('part', ST.part); store('ui', ST.ui);
     }, 200);
   }
 
@@ -207,7 +206,6 @@
     if (obj === 'part') return ST.part;
     if (obj === 'machine') return ST.machine;
     if (obj === 'ui') return ST.ui;
-    if (obj === 'turret') return ST.turret;
     if (obj === 'punch') return isCat(ST.ui.editPunch) ? null : findPunch(ST.ui.editPunch);   // каталог не меняем
     if (obj === 'die') return isCat(ST.ui.editDie) ? null : findDie(ST.ui.editDie);
     if (obj.indexOf('seg:') === 0) return ST.part.segs[+obj.slice(4)];
@@ -238,7 +236,6 @@
     }
     else if (obj === 'die') { renderDieView(); renderDieSide(); }
     else if (obj === 'machine') renderDieView();
-    else if (obj === 'turret') renderTurretOut();
     else if (obj === 'part' || obj.indexOf('seg:') === 0) {
       if (ST.ui.tab === 'part') renderPartOutputs();
       if (ST.ui.tab === 'sim') renderSimOutputs();
@@ -285,7 +282,6 @@
     if (t === 'sim') renderSimTab();
     if (t === 'dies') renderDiesTab();
     if (t === 'table') renderTable();
-    if (t === 'turret') renderTurretTab();
   }
 
   // =====================================================================
@@ -1114,6 +1110,23 @@
     upd(); $('#panelText').addEventListener('input', upd);
   }
 
+  // Картинка шага для карты гибки: лист перед гибом (сплошной), после гиба (пунктир), пуансон на листе, матрица и задний упор
+  function stepPicture(sim, done, s) {
+    const p0 = sim.place(sim.fracs(done, s.bend, 0), s.bend, s.mirror), p1 = sim.place(sim.fracs(done, s.bend, 1), s.bend, s.mirror);
+    const t = sim.tools(p0.tipY), V = sim.ctx.die.V, S = sim.ctx.S;
+    let b = G.bounds(p1.poly, G.bounds(p0.poly));
+    b = G.bounds([{ x: -V * 1.2 - 8, y: sim.dieTop - Math.max(V, 14) }, { x: V * 1.2 + 8, y: p0.tipY + Math.max(30, V * 1.5) }], b);
+    if (s.stop != null) b = G.bounds([{ x: s.stop + 8, y: sim.dieTop }], b);
+    const m = Math.max(b.x1 - b.x0, b.y1 - b.y0) * 0.05 + 2, fs = Math.max(b.x1 - b.x0, (b.y1 - b.y0) * 1.35) / 22;
+    let h = SV.path(sim.pad, 'ps-mach') + SV.path(sim.die.poly, 'ps-tool') + SV.path(t.holder, 'ps-mach') + SV.path(t.tang, 'ps-mach') + SV.path(t.punch, 'ps-tool') +
+      SV.path(p1.poly, 'ps-ghost') + SV.path(p0.poly, 'ps-sheet') + SV.path(s.face === 'A' ? p0.A : p0.B, 'ps-face', false);
+    if (s.stop != null) {
+      h += SV.path(G.rect(s.stop, sim.dieTop - fs * 0.3, s.stop + fs * 0.5, sim.dieTop + S + fs * 1.1), 'ps-gauge');
+      h += SV.text({ x: s.stop, y: sim.dieTop - fs * 1.1 }, fmt(s.stop, 1), fs, 'ps-t', 'end');
+    }
+    return '<svg class="pc-step" viewBox="' + SV.viewBox({ x0: b.x0 - m, x1: b.x1 + m, y0: b.y0 - m, y1: b.y1 + m }, 0) + '" preserveAspectRatio="xMidYMid meet">' + h + '</svg>';
+  }
+
   // Карта гибки для печати или сохранения в PDF: всё, что нужно оператору, на одном листе
   function printCard() {
     const p = ST.part, r = R || resolve(), pl = PLAYER.plan;
@@ -1134,12 +1147,14 @@
     h += '<div class="pc-h">Развёртка: линии гиба от начала заготовки (отрезок 1)</div>' + flatStrip(r.an) +
       '<div class="pc-chips">' + r.an.bends.map(b => '<span>Г' + (b.i + 1) + ' — ' + fmt(b.pos, 2) + ' мм</span>').join('') + '</div>';
     h += '<div class="pc-h">Порядок гибов</div>' + (pl.ok ? '' : '<div class="pc-warn">Внимание: в этом порядке есть столкновения — см. отметки в таблице.</div>') +
-      '<table class="pc-steps"><thead><tr><th>Шаг</th><th>Гиб</th><th>Угол</th><th>Действие</th><th>К упору</th><th>Упор, мм</th><th>✓</th></tr></thead><tbody>' +
-      pl.steps.map((s, k) => '<tr><td>' + (k + 1) + '</td><td>Г' + (s.bend + 1) + '</td><td>' + fmt(r.an.bends[s.bend].incl, 0) + '°</td><td>' +
+      '<table class="pc-steps"><thead><tr><th>Шаг</th><th>Гиб</th><th>Угол</th><th>Как лежит лист</th><th>Действие</th><th>К упору</th><th>Упор, мм</th><th>✓</th></tr></thead><tbody>' +
+      pl.steps.map((s, k) => '<tr><td>' + (k + 1) + '</td><td>Г' + (s.bend + 1) + '</td><td>' + fmt(r.an.bends[s.bend].incl, 0) + '°</td><td class="pc-pic">' +
+        (PLAYER.sim ? stepPicture(PLAYER.sim, pl.steps.slice(0, k).map(x => x.bend), s) : '') + '</td><td>' +
         (s.notes.map(esc).join('<br>') || 'то же положение') + (s.hits.length ? '<br><b>' + esc(hitList(s)) + '</b>' : '') + '</td><td>' + esc(s.backEdge) + '</td><td><b>' +
         (s.stop != null ? fmt(s.stop, 1) : '—') + '</b></td><td class="pc-box"></td></tr>').join('') + '</tbody></table>';
     const msgs = r.an.warnings.map(esc);
     if (msgs.length) h += '<div class="pc-h">Замечания</div><ul class="pc-notes">' + msgs.map(m => '<li>' + m + '</li>').join('') + '</ul>';
+    h += '<div class="pc-legend">На рисунках: слева оператор, справа задний упор. Сплошной контур — лист перед гибом, пунктир — после гиба, жёлтая линия — сторона листа вверх, коричневая планка — упор.</div>';
     h += '<div class="pc-foot">Упор — расстояние от оси пуансона до заднего упора. Расчёт справочный: первый гиб проверяйте на образце. · wirkenrus.com · +7 962 696-59-74</div>';
     $('#printCard').innerHTML = h;
     // печатаем всегда в светлой теме; логотип должен успеть загрузиться
@@ -1183,6 +1198,8 @@
         return;
       }
       if (e.target.id === 'recBtn') { recordVideo(); return; }
+      const rm = e.target.closest('[data-recmode]');
+      if (rm) { recStart(rm.dataset.recmode); return; }
       if (e.target.id === 'printBtn') { printCard(); return; }
       if (e.target.id === 'shareBtn') { sharePanel(); return; }
       if (e.target.id === 'reqBtn') { requestPanel(); return; }
@@ -1433,59 +1450,127 @@
     PLAYER.rec = null;
     setTimeout(() => { if (r.state !== 'inactive') r.stop(); }, 300);   // дать дописать последний кадр
   }
-  // Кадр для видео: картинка 3D-вида плюс подпись — логотип wirken и адрес сайта. Пишется этот составной кадр,
-  // поэтому подпись есть в самом файле, а на экране её нет.
-  const REC = { canvas: null, logo: null, timer: null };
-  function recFrame() {
-    const cv = $('#sim3d canvas'), c = REC.canvas;
-    if (!cv || !c) return;
-    if (c.width !== cv.width || c.height !== cv.height) { c.width = cv.width; c.height = cv.height; }
-    const g = c.getContext('2d'), W = c.width, H = c.height, u = Math.max(12, Math.round(H * 0.045));
-    g.fillStyle = '#ffffff'; g.fillRect(0, 0, W, H);
-    g.drawImage(cv, 0, 0, W, H);
-    // полоса подписи внизу
-    const bh = Math.round(u * 2.1), pad = Math.round(u * 0.9);
-    g.fillStyle = 'rgba(255,255,255,.92)'; g.fillRect(0, H - bh, W, bh);
+  // ---------- Запись видео ----------
+  // Пишется отдельный холст: на нём кадр гибки (3D-вид или плоская картинка) и подпись — логотип wirken и адрес сайта.
+  // Поэтому подпись есть в самом файле, а на экране её нет.
+  const REC = { canvas: null, logo: null, timer: null, mode: null };
+  function recBar(g, W, H) {
+    const u = Math.max(12, Math.round(H * 0.045)), bh = Math.round(u * 2.1), pad = Math.round(u * 0.9), cy = H - bh / 2;
+    g.fillStyle = 'rgba(255,255,255,.94)'; g.fillRect(0, H - bh, W, bh);
     g.fillStyle = '#dfe4ea'; g.fillRect(0, H - bh, W, Math.max(1, Math.round(u * 0.06)));
-    let x = pad; const cy = H - bh / 2;
-    const lg = REC.logo;
-    if (lg && lg.complete && lg.naturalWidth) { const lh = Math.round(u * 1.15), lw = Math.round(lh * lg.naturalWidth / lg.naturalHeight); g.drawImage(lg, x, Math.round(cy - lh / 2), lw, lh); x += lw + pad; }
-    else { g.fillStyle = '#115398'; g.font = '800 ' + Math.round(u * 1.1) + 'px Manrope, Inter, Arial, sans-serif'; g.textBaseline = 'middle'; g.textAlign = 'left'; g.fillText('wirken', x, cy); x += g.measureText('wirken').width + pad; }
+    let x = pad; const lg = REC.logo;
     g.textBaseline = 'middle';
+    if (lg && lg.complete && lg.naturalWidth) { const lh = Math.round(u * 1.15), lw = Math.round(lh * lg.naturalWidth / lg.naturalHeight); g.drawImage(lg, x, Math.round(cy - lh / 2), lw, lh); x += lw + pad; }
+    else { g.fillStyle = '#115398'; g.font = '800 ' + Math.round(u * 1.1) + 'px Manrope, Inter, Arial, sans-serif'; g.textAlign = 'left'; g.fillText('wirken', x, cy); x += g.measureText('wirken').width + pad; }
     g.fillStyle = '#115398'; g.font = '600 ' + Math.round(u * 0.8) + 'px Inter, Arial, sans-serif'; g.textAlign = 'right';
     g.fillText('wirkenrus.com', W - pad, cy);
-    const nm = (ST.part.name || '').trim();
+    const siteW = g.measureText('wirkenrus.com').width, nm = (ST.part.name || '').trim();
     if (nm && nm !== 'Новая деталь') {
       g.fillStyle = '#64707d'; g.font = '500 ' + Math.round(u * 0.7) + 'px Inter, Arial, sans-serif'; g.textAlign = 'left';
-      const maxW = W - pad - g.measureText('wirkenrus.com').width - pad * 2 - x; let t = nm;
+      const maxW = W - pad - siteW - pad * 2 - x; let t = nm;
       while (t.length > 3 && g.measureText(t).width > maxW) t = t.slice(0, -2);
       if (maxW > u * 3) g.fillText(t === nm ? t : t + '…', x, cy);
     }
+    return bh;
+  }
+  // 3D: копия картинки с холста three.js
+  function recFrame3d() {
+    const cv = $('#sim3d canvas'), c = REC.canvas;
+    if (!cv || !c) return;
+    if (c.width !== cv.width || c.height !== cv.height) { c.width = cv.width; c.height = cv.height; }
+    const g = c.getContext('2d');
+    g.fillStyle = '#ffffff'; g.fillRect(0, 0, c.width, c.height);
+    g.drawImage(cv, 0, 0, c.width, c.height);
+    recBar(g, c.width, c.height);
+  }
+  // 2D: та же гибка, что на экране (с тем же приближением), нарисованная прямо на холсте 1280×720
+  function recFrame2d(fr) {
+    const c = REC.canvas;
+    if (!c || !fr) return;
+    const W = 1280, H = 720;
+    if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
+    const g = c.getContext('2d'), u = Math.round(H * 0.045), bh = Math.round(u * 2.1), top = Math.round(u * 2.7);
+    g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = '#ffffff'; g.fillRect(0, 0, W, H);
+    const ax = 24, ay = top, aw = W - 48, ah = H - bh - top - 12, v = fr.v;
+    const k = Math.min(aw / (v.x1 - v.x0), ah / (v.y1 - v.y0));
+    const ox = ax + (aw - (v.x1 - v.x0) * k) / 2 - v.x0 * k, oy = ay + (ah - (v.y1 - v.y0) * k) / 2 + v.y1 * k;
+    const X = x => ox + x * k, Y = y => oy - y * k;
+    g.save(); g.beginPath(); g.rect(ax, ay, aw, ah); g.clip();
+    g.strokeStyle = '#edf0f3'; g.lineWidth = 1; g.beginPath();   // чертёжная сетка
+    for (let x = ax; x <= ax + aw; x += 40) { g.moveTo(x + .5, ay); g.lineTo(x + .5, ay + ah); }
+    for (let y = ay; y <= ay + ah; y += 40) { g.moveTo(ax, y + .5); g.lineTo(ax + aw, y + .5); }
+    g.stroke();
+    const hit = n => fr.hitTools.indexOf(n) >= 0;
+    const poly = (pts, fill, stroke, lw, closed) => {
+      if (!pts || !pts.length) return;
+      g.beginPath(); pts.forEach((p, i) => i ? g.lineTo(X(p.x), Y(p.y)) : g.moveTo(X(p.x), Y(p.y)));
+      if (closed !== false) g.closePath();
+      if (fill) { g.fillStyle = fill; g.fill(); }
+      g.strokeStyle = stroke; g.lineWidth = lw; g.lineJoin = 'round'; g.stroke();
+    };
+    const MF = '#c4cad2', ME = '#aeb4bb', TF = '#979da3', TE = '#7b8288', RED = '#ff3b30';
+    poly(fr.sim.table, MF, hit('стол') ? RED : ME, hit('стол') ? 3 : 1.5);
+    poly(fr.sim.pad, MF, hit('подложка') ? RED : ME, hit('подложка') ? 3 : 1.5);
+    poly(fr.sim.die.poly, TF, hit('матрица') ? RED : TE, hit('матрица') ? 3 : 1.5);
+    g.strokeStyle = 'rgba(217,45,45,.45)'; g.lineWidth = 1; g.setLineDash([10, 5, 2, 5]); g.beginPath(); g.moveTo(X(0), ay); g.lineTo(X(0), ay + ah); g.stroke(); g.setLineDash([]);
+    if (fr.showStop && fr.s.stop != null) {
+      const y = fr.sim.dieTop, w = Math.max(6, fr.fs * 0.45);
+      poly(G.rect(fr.s.stop, y - fr.fs * 0.4, fr.s.stop + w, y + ST.part.S + fr.fs * 1.2), '#ce9549', '#a5722f', 1);
+      g.fillStyle = '#64707d'; g.font = '500 15px "JetBrains Mono", Consolas, monospace'; g.textAlign = 'center'; g.textBaseline = 'top';
+      g.fillText('упор ' + fmt(fr.s.stop, 1), X(fr.s.stop + w / 2), Y(y - fr.fs * 0.5) + 4);
+    }
+    poly(fr.t.beam, MF, hit('балка') ? RED : ME, hit('балка') ? 3 : 1.5);
+    poly(fr.t.holder, MF, hit('зажим пуансона') ? RED : ME, hit('зажим пуансона') ? 3 : 1.5);
+    poly(fr.t.tang, MF, ME, 1.5);
+    poly(fr.t.punch, TF, hit('пуансон') ? RED : TE, hit('пуансон') ? 3 : 1.5);
+    poly(fr.sheet, '#ffffff', fr.hits.length ? RED : '#2f3437', 2.2);
+    poly(fr.face, null, '#ffb300', 2.6, false);
+    fr.hits.forEach(x => x.hits.forEach(p => { g.beginPath(); g.arc(X(p.x), Y(p.y), 6, 0, 2 * Math.PI); g.fillStyle = RED; g.fill(); g.strokeStyle = '#fff'; g.lineWidth = 1.5; g.stroke(); }));
+    g.restore();
+    g.strokeStyle = '#dfe4ea'; g.lineWidth = 1; g.strokeRect(ax + .5, ay + .5, aw, ah);
+    // подпись шага сверху
+    g.textAlign = 'left'; g.textBaseline = 'middle';
+    g.fillStyle = '#17212b'; g.font = '700 ' + Math.round(u * 0.85) + 'px Manrope, Inter, Arial, sans-serif'; g.fillText(fr.title, ax, Math.round(u * 0.95));
+    g.fillStyle = fr.hits.length ? '#d92d2d' : '#64707d'; g.font = '500 ' + Math.round(u * 0.6) + 'px Inter, Arial, sans-serif';
+    let sub = fr.hits.length ? 'Столкновение: ' + uniq(fr.hitTools).join(', ') : fr.sub;
+    while (sub.length > 4 && g.measureText(sub).width > aw) sub = sub.slice(0, -2);
+    g.fillText(sub, ax, Math.round(u * 1.95));
+    recBar(g, W, H);
   }
   function recCancel() {
     clearTimeout(REC.timer); REC.timer = null;
     const ov = $('#recCount'); if (ov) ov.remove();
     const btn = $('#recBtn'); btn.innerHTML = ic('rec') + 'Видео'; btn.classList.remove('rec');
   }
+  // Кнопка «Видео»: во время отсчёта — отмена, во время записи — стоп, иначе — выбор, в каком виде записывать
   function recordVideo() {
-    if (REC.timer) { recCancel(); toast('Запись отменена'); return; }      // нажали во время отсчёта
-    if (PLAYER.rec) { PLAYER.pause(); return; }                            // нажали во время записи — стоп
+    if (REC.timer) { recCancel(); toast('Запись отменена'); return; }
+    if (PLAYER.rec) { PLAYER.pause(); return; }
     if (!PLAYER.plan || !PLAYER.plan.steps.length) { toast('Сначала нужна деталь с гибами'); return; }
+    $('#simPanel').hidden = false;
+    $('#simPanel').innerHTML = '<div class="row between"><b>В каком виде записать видео?</b><button type="button" class="ghost sm" id="panelClose" aria-label="Закрыть">' + ic('x') + '</button></div>' +
+      '<div class="row"><button type="button" class="primary" data-recmode="2d">' + ic('rec') + '2D — как на чертеже</button>' +
+      '<button type="button" data-recmode="3d">' + ic('cube') + '3D — объёмный вид</button></div>' +
+      '<p class="muted small">Перед записью будет 3 секунды, чтобы выставить вид: в 2D — приближение, в 3D — поворот. В видео добавится подпись wirken и адрес сайта.</p>';
+  }
+  function recStart(mode) {
+    $('#simPanel').hidden = true;
     const start = () => {
-      const cv = $('#sim3d canvas');
       if (!REC.canvas) REC.canvas = document.createElement('canvas');
       if (!REC.logo) { REC.logo = new Image(); REC.logo.src = 'img/logo.png'; }
       const mime = ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm'].find(m => MediaRecorder.isTypeSupported(m));
+      const is3d = mode === '3d', unbg = () => { if (is3d && sim3d && sim3d.ok) { sim3d.scene.background = null; sim3d.render(); } };
+      REC.mode = mode;
       PLAYER.pause(); PLAYER.t = 0;
-      sim3d.scene.background = new THREE.Color(0xffffff);   // у холста прозрачный фон — в видео он был бы чёрным
-      PLAYER.recDraw = recFrame; drawFrame();
+      if (is3d) sim3d.scene.background = new THREE.Color(0xffffff);   // у холста прозрачный фон — в видео он был бы чёрным
+      PLAYER.recDraw = is3d ? recFrame3d : recFrame2d; drawFrame();
       let rec;
       try { rec = new MediaRecorder(REC.canvas.captureStream(30), mime ? { mimeType: mime, videoBitsPerSecond: 5e6 } : undefined); }
-      catch (err) { PLAYER.recDraw = null; sim3d.scene.background = null; sim3d.render(); recCancel(); toast('Запись видео не запустилась: ' + err.message, 5000); return; }
+      catch (err) { PLAYER.recDraw = null; unbg(); recCancel(); toast('Запись видео не запустилась: ' + err.message, 5000); return; }
       const chunks = [], btn = $('#recBtn');
       rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
       rec.onstop = () => {
-        PLAYER.recDraw = null; sim3d.scene.background = null; sim3d.render();
+        PLAYER.recDraw = null; unbg();
         btn.innerHTML = ic('rec') + 'Видео'; btn.classList.remove('rec');
         if (!chunks.length) { toast('Видео не записалось', 4000); return; }
         const type = rec.mimeType || mime || 'video/webm', a = document.createElement('a');
@@ -1499,23 +1584,26 @@
       btn.innerHTML = ic('stop') + 'Стоп'; btn.classList.add('rec');
       PLAYER.play();
     };
-    // Отсчёт 3 секунды: за это время можно повернуть и приблизить вид так, как он должен быть в видео
+    // Отсчёт 3 секунды: за это время можно выставить вид так, как он должен быть в видео
     const go = () => {
-      const cv = $('#sim3d canvas');
-      if (!cv || !document.createElement('canvas').captureStream || typeof MediaRecorder === 'undefined') { toast('Этот браузер не умеет записывать видео — воспользуйтесь записью экрана телефона', 5000); return; }
+      if (!document.createElement('canvas').captureStream || typeof MediaRecorder === 'undefined' || (mode === '3d' && !$('#sim3d canvas'))) {
+        toast('Этот браузер не умеет записывать видео — воспользуйтесь записью экрана телефона', 5000); return;
+      }
       PLAYER.pause(); PLAYER.t = 0; drawFrame();
       const btn = $('#recBtn'); btn.innerHTML = ic('x') + 'Отмена'; btn.classList.add('rec');
       let ov = $('#recCount');
       if (!ov) { ov = document.createElement('div'); ov.id = 'recCount'; ov.className = 'rec-count'; $('.sim-wrap').appendChild(ov); }
+      $('#simCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
       let n = 3;
       const tick = () => {
         if (n === 0) { REC.timer = null; ov.remove(); start(); return; }
-        ov.innerHTML = '<b>' + n + '</b><span>Запись начнётся через ' + n + ' с — поверните вид, как нужно</span>';
+        ov.innerHTML = '<b>' + n + '</b><span>Запись начнётся через ' + n + ' с — ' + (mode === '3d' ? 'поверните вид, как нужно' : 'приблизьте вид, как нужно') + '</span>';
         n--; REC.timer = setTimeout(tick, 1000);
       };
       tick();
     };
-    if (PLAYER.d3 && sim3d && sim3d.ok) go(); else set3d(true, go);
+    if (mode === '3d') { if (PLAYER.d3 && sim3d && sim3d.ok) go(); else set3d(true, go); }
+    else { if (PLAYER.d3) set3d(false); go(); }
   }
   function draw3d(sim, s, sheet, tip, hits, showStop) {
     const v = sim3d;
@@ -1546,7 +1634,6 @@
     v.setPart('sheet', sheet, L, { color: hits.length ? 0xff3b30 : 0x1565c0, metal: 0.1, edges: true, edgeColor: hits.length ? 0x8a0f0a : 0x0a3a78 });
     v.setPart('gauge', showStop && s.stop != null ? G.rect(s.stop, sim.dieTop - 6, s.stop + 8, sim.dieTop + ST.part.S + 18) : null, Math.min(L, 160), { color: 0xc98a2b, edges: true });
     v.render();
-    if (PLAYER.recDraw) PLAYER.recDraw();
     return true;
   }
 
@@ -1610,6 +1697,9 @@
       '<div>' + s.notes.map(esc).concat(['к упору ' + s.backEdge]).concat(s.stop != null ? ['упор ' + fmt(s.stop, 1) + ' мм'] : []).join(' · ') + '</div>' +
       (hits.length ? '<div class="bad">Столкновение: ' + uniq(hitTools).join(', ') + '</div>' : '');
     if (slider && document.activeElement !== slider) slider.value = T ? Math.round(PLAYER.t / T * 1000) : 0;
+    if (PLAYER.recDraw) PLAYER.recDraw({ sim, s, sheet, face, t, hits, hitTools, v, fs, showStop: slide === 0 && u < 0.8,
+      title: 'Шаг ' + (k + 1) + ' из ' + n + ' · Гиб Г' + (s.bend + 1) + ' на ' + fmt(b.incl, 0) + '° · ' + phase,
+      sub: s.notes.concat(['к упору ' + s.backEdge]).concat(s.stop != null ? ['упор ' + fmt(s.stop, 1) + ' мм'] : []).join(' · ') });
   }
 
   // =====================================================================
@@ -1784,137 +1874,6 @@
   }
 
   // =====================================================================
-  // ПРОБИВКА: подбор инструмента для координатно-пробивного пресса
-  // =====================================================================
-  const T_SHAPES = { round: ['Круг', 'Диаметр, мм'], square: ['Квадрат', 'Сторона, мм'], rect: ['Прямоугольник', 'Длина, мм', 'Ширина, мм'], oblong: ['Овал (паз)', 'Длина, мм', 'Ширина, мм'] };
-
-  // Расчёт по отверстию: периметр реза, описанная окружность, зазор, размер матрицы, усилие, станция, проверки
-  function turretCalc(t) {
-    const TT = LG.TURRET, S = Math.max(0.1, +t.S || 1), mat = LG.MATERIALS[t.material] ? t.material : 'Fe';
-    let a = Math.max(0.1, +t.a || 1), b = Math.max(0.1, +t.b || 1);
-    if ((t.shape === 'rect' || t.shape === 'oblong') && b > a) [a, b] = [b, a];   // длина — большая сторона
-    if (t.shape === 'round' || t.shape === 'square') b = a;
-    const per = t.shape === 'round' ? Math.PI * a : t.shape === 'square' ? 4 * a : t.shape === 'rect' ? 2 * (a + b) : 2 * (a - b) + Math.PI * b;
-    const diag = t.shape === 'round' || t.shape === 'oblong' ? a : Math.hypot(a, b);
-    const row = TT.clearance[mat].find(r => S <= r[0] + 1e-9) || TT.clearance[mat][TT.clearance[mat].length - 1];
-    const pct = row[1], cl = Math.round(pct * S * 100) / 100;          // полный зазор, мм
-    const tau = LG.MATERIALS[mat].R * TT.shearK, kN = per * S * tau / 1000, ton = kN / 9.81;
-    const sys = TT.systems[t.sys] || TT.systems.tt;
-    const st = sys.stations.find(x => diag <= x[1] + 1e-9) || null;
-    const minDim = TT.minSize[mat] * S, small = Math.min(a, b);
-    const warn = [], bad = [];
-    if (!st) bad.push('Пуансон с описанной окружностью ' + fmt(diag, 1) + ' мм не помещается ни в одну станцию ' + sys.name + ' (наибольшая — ' + fmt(sys.stations[sys.stations.length - 1][1], 1) + ' мм). Такое отверстие вырубают по контуру пуансоном меньшего размера.');
-    if (small + 1e-9 < minDim) bad.push('Размер ' + fmt(small, 2) + ' мм меньше допустимого для ' + LG.MATERIALS[mat].name.split(',')[0].split(' (')[0].toLowerCase() + ' ' + fmt(S, 2) + ' мм: нужно не меньше ' + fmt(minDim, 2) + ' мм (' + fmt(TT.minSize[mat], 2) + ' × толщина), иначе пуансон ломается.');
-    const press = +t.ton || 0;
-    if (press > 0 && ton > press) bad.push('Усилие ' + fmt(ton, 1) + ' т больше, чем может пресс (' + fmt(press, 0) + ' т). Нужен пуансон со скосом или вырубка в несколько ударов.');
-    else if (press > 0 && ton > 0.8 * press) warn.push('Усилие ' + fmt(ton, 1) + ' т — больше 80 % от возможностей пресса (' + fmt(press, 0) + ' т). Лучше пуансон со скосом.');
-    return { S, mat, a, b, per, diag, pct, cl, tau, kN, ton, sys, st, minDim, warn, bad, shape: t.shape };
-  }
-  // Контур пуансона или окна матрицы (grow — прибавка на сторону)
-  function turretShape(c, grow) {
-    const a = c.a + 2 * grow, b = c.b + 2 * grow;
-    if (c.shape === 'round') return G.arc({ x: 0, y: 0 }, a / 2, 0, 2 * Math.PI, 5).slice(0, -1);
-    if (c.shape === 'oblong') { const r = b / 2, h = (a - b) / 2; return G.arc({ x: h, y: 0 }, r, -Math.PI / 2, Math.PI / 2, 6).concat(G.arc({ x: -h, y: 0 }, r, Math.PI / 2, 1.5 * Math.PI, 6)); }
-    return G.rect(-a / 2, -b / 2, a / 2, b / 2);
-  }
-  const turretSize = (c, add) => c.shape === 'round' ? 'Ø' + fmt(c.a + add, 2) : c.shape === 'square' ? fmt(c.a + add, 2) + ' × ' + fmt(c.a + add, 2) : fmt(c.a + add, 2) + ' × ' + fmt(c.b + add, 2);
-
-  function renderTurretTab() {
-    const t = ST.turret, sh = T_SHAPES[t.shape] || T_SHAPES.round;
-    const sel = (id, opts, cur) => '<select id="' + id + '">' + opts.map(o => '<option value="' + o[0] + '"' + (o[0] === cur ? ' selected' : '') + '>' + o[1] + '</option>').join('') + '</select>';
-    $('#turretForm').innerHTML =
-      '<div class="field"><label>Система инструмента</label>' + sel('tSys', Object.keys(LG.TURRET.systems).map(k => [k, LG.TURRET.systems[k].name]), t.sys) + '</div>' +
-      '<div class="field"><label>Материал</label>' + sel('tMat', Object.keys(LG.MATERIALS).map(k => [k, LG.MATERIALS[k].name]), t.material) + '</div>' +
-      stepper('turret', 'S', t.S, 0.1, 0.1, 2, 'Толщина листа S, мм') +
-      '<div class="field"><label>Форма отверстия</label>' + sel('tShape', Object.keys(T_SHAPES).map(k => [k, T_SHAPES[k][0]]), t.shape) + '</div>' +
-      stepper('turret', 'a', t.a, 0.5, 0.1, 2, sh[1]) +
-      (sh[2] ? stepper('turret', 'b', t.b, 0.5, 0.1, 2, sh[2]) : '') +
-      stepper('turret', 'ton', t.ton, 1, 0, 0, 'Усилие пресса, т (0 — не проверять)') +
-      '<div class="field"><button type="button" id="tFromPart" title="Взять толщину и материал из детали в конструкторе">' + ic('copy') + 'Лист как в детали</button></div>';
-    renderTurretOut();
-  }
-
-  function renderTurretOut() {
-    if (ST.ui.tab !== 'turret') return;
-    const t = ST.turret, c = turretCalc(t), TT = LG.TURRET, matName = LG.MATERIALS[c.mat].name.split(',')[0];
-    let h = '<div class="kv">' +
-      kv('Станция', c.st ? '<b>' + esc(c.sys.name) + ' · ' + c.st[0] + '</b> <span class="muted">(до ' + fmt(c.st[1], 2) + ' мм)</span>' : '<b class="bad">не помещается</b>') +
-      kv('Пуансон', '<b>' + turretSize(c, 0) + ' мм</b> <span class="muted">' + T_SHAPES[c.shape][0].toLowerCase() + '</span>') +
-      kv('Матрица', '<b>' + turretSize(c, c.cl) + ' мм</b>') +
-      kv('Зазор', fmt(c.pct * 100, 0) + ' % от S = <b>' + fmt(c.cl, 2) + ' мм</b> <span class="muted">(по ' + fmt(c.cl / 2, 3) + ' на сторону)</span>') +
-      kv('Описанная окружность', fmt(c.diag, 2) + ' мм') +
-      kv('Периметр реза', fmt(c.per, 1) + ' мм') +
-      kv('Усилие', '<b class="' + (c.bad.some(x => /Усилие/.test(x)) ? 'bad' : '') + '">' + fmt(c.kN, 1) + ' кН ≈ ' + fmt(c.ton, 2) + ' т</b>') +
-      '</div>';
-    h += '<div class="small muted" style="margin-top:8px">Усилие = периметр × толщина × сопротивление срезу (' + fmt(c.tau, 0) + ' Н/мм² для материала «' + esc(matName) + '»).</div>';
-    const msgs = c.bad.map(e => '<li class="bad">' + esc(e) + '</li>').concat(c.warn.map(w => '<li class="warn">' + esc(w) + '</li>'));
-    if (msgs.length) h += '<ul class="msgs">' + msgs.join('') + '</ul>';
-    else h += '<div class="status good" style="margin-top:10px">' + ic('check') + 'Отверстие пробивается стандартным инструментом</div>';
-    h += '<div class="sugg"><div class="small"><b>Расстояния для листа ' + fmt(c.S, 2) + ' мм</b></div><div class="kv">' +
-      kv('Между отверстиями', 'не меньше ' + fmt(2 * c.S, 1) + ' мм <span class="muted">(2 × S)</span>') +
-      kv('До края листа', 'не меньше ' + fmt(2 * c.S, 1) + ' мм <span class="muted">(2 × S)</span>') +
-      kv('До линии гиба', 'не меньше ' + fmt(2.5 * c.S, 1) + ' мм + радиус гиба <span class="muted">(иначе отверстие вытянется)</span>') +
-      '</div></div>';
-    $('#turretOut').innerHTML = h;
-
-    // чертёж: пуансон, окно матрицы (пунктир) и описанная окружность
-    const pp = turretShape(c, 0), dd = turretShape(c, c.cl / 2), R = c.diag / 2, fs = Math.max(c.diag, 6) / 14;
-    let s = SV.circle({ x: 0, y: 0 }, R, 't-circ') + SV.path(dd, 't-die') + SV.path(pp, 'm-punch');
-    s += SV.dim({ x: -c.a / 2, y: -c.b / 2 }, { x: c.a / 2, y: -c.b / 2 }, -fs * 1.6 - (R - c.b / 2), fmt(c.a, 2), fs);
-    if (c.shape === 'rect' || c.shape === 'oblong') s += SV.dim({ x: c.a / 2, y: -c.b / 2 }, { x: c.a / 2, y: c.b / 2 }, -fs * 1.6 - (R - c.a / 2), fmt(c.b, 2), fs);
-    s += SV.text({ x: 0, y: R + fs * 1.5 }, 'описанная окружность ' + fmt(c.diag, 1), fs * 0.75, 'lbl-s');
-    s += SV.text({ x: 0, y: 0 }, 'зазор ' + fmt(c.cl, 2), fs * 0.8, 'lbl');
-    const pad = fs * 4;
-    $('#turretSvg').setAttribute('viewBox', SV.viewBox({ x0: -R - pad, x1: R + pad, y0: -R - pad, y1: R + pad }, 0));
-    $('#turretSvg').innerHTML = s;
-
-    // таблицы: зазоры по материалам и станции выбранной системы
-    const rng = (rows, i) => i === 0 ? 'до ' + fmt(rows[0][0], 1) : rows[i][0] === Infinity ? 'больше ' + fmt(rows[i - 1][0], 1) : fmt(rows[i - 1][0], 1) + ' – ' + fmt(rows[i][0], 1);
-    let tb = '<table class="mini"><thead><tr><th>Материал</th><th>Толщина, мм</th><th>Зазор</th><th>Мин. размер</th></tr></thead><tbody>';
-    Object.keys(TT.clearance).forEach(m => TT.clearance[m].forEach((r, i) => {
-      const cur = m === c.mat && r[1] === c.pct && (TT.clearance[m].find(x => c.S <= x[0] + 1e-9) || TT.clearance[m][TT.clearance[m].length - 1]) === r;
-      tb += '<tr class="' + (cur ? 't-cur' : '') + '"><td>' + (i === 0 ? esc(LG.MATERIALS[m].name.split(',')[0]) : '') + '</td><td>' + rng(TT.clearance[m], i) + '</td><td>' + fmt(r[1] * 100, 0) + ' %</td><td>' +
-        (i === 0 ? fmt(TT.minSize[m], 2) + ' × S' : '') + '</td></tr>';
-    }));
-    tb += '</tbody></table><table class="mini"><thead><tr><th>' + esc(c.sys.name) + '</th><th>Пуансон до, мм</th></tr></thead><tbody>' +
-      c.sys.stations.map(x => '<tr class="' + (c.st && c.st[0] === x[0] ? 't-cur' : '') + '"><td>' + x[0] + '</td><td>' + fmt(x[1], 2) + '</td></tr>').join('') + '</tbody></table>';
-    $('#turretTables').innerHTML = tb;
-  }
-
-  function bindTurretTab() {
-    const root = $('#tab-turret');
-    root.addEventListener('change', e => {
-      const t = ST.turret, id = e.target.id;
-      if (id === 'tSys') t.sys = e.target.value;
-      else if (id === 'tMat') t.material = e.target.value;
-      else if (id === 'tShape') { t.shape = e.target.value; saveAll(); renderTurretTab(); return; }
-      else return;
-      saveAll(); renderTurretOut();
-    });
-    root.addEventListener('click', e => {
-      const t = ST.turret, id = e.target.id;
-      if (id === 'tFromPart') { t.S = ST.part.S; t.material = ST.part.material; saveAll(); renderTurretTab(); toast('Толщина и материал взяты из детали'); return; }
-      if (id === 'turretClose') { $('#turretPanel').hidden = true; return; }
-      if (id === 'turretCopy') { const ta = $('#turretText'); try { navigator.clipboard.writeText(ta.value).then(() => toast('Скопировано'), () => { ta.select(); toast('Текст выделен — скопируйте вручную', 4000); }); } catch (err) { ta.select(); } return; }
-      if (id === 'turretReq') {
-        const c = turretCalc(t), matName = LG.MATERIALS[c.mat].name.split(',')[0];
-        const txt = 'Здравствуйте! Нужен пробивной инструмент:\n' +
-          '— Система: ' + c.sys.name + (c.st ? ', станция ' + c.st[0] : '') + '\n' +
-          '— Пуансон: ' + T_SHAPES[c.shape][0].toLowerCase() + ' ' + turretSize(c, 0) + ' мм\n' +
-          '— Матрица: ' + turretSize(c, c.cl) + ' мм (зазор ' + fmt(c.cl, 2) + ' мм)\n' +
-          'Лист: ' + matName + ' ' + fmt(c.S, 2) + ' мм. Усилие пробивки ≈ ' + fmt(c.ton, 1) + ' т.\n' + 'Прошу сообщить наличие и стоимость.';
-        const pn = $('#turretPanel'); pn.hidden = false;
-        pn.innerHTML = '<div class="row between"><b>Заявка в wirken</b><button type="button" class="ghost sm" id="turretClose" aria-label="Закрыть">' + ic('x') + '</button></div>' +
-          '<textarea id="turretText" class="backup" rows="6">' + esc(txt) + '</textarea>' +
-          '<div class="row"><a class="link-btn primary" id="turretTg" href="#" target="_blank" rel="noopener">' + ic('send') + 'Отправить в Telegram</a>' +
-          '<button type="button" id="turretCopy">' + ic('copy') + 'Скопировать текст</button><a class="link-btn" href="tel:+79626965974">' + ic('phone') + '+7 962 696-59-74</a></div>';
-        const upd = () => { $('#turretTg').href = 'https://t.me/+79626965974?text=' + encodeURIComponent($('#turretText').value).slice(0, 3800); };
-        upd(); $('#turretText').addEventListener('input', upd);
-      }
-    });
-  }
-
-  // =====================================================================
   // ТАБЛИЦА
   // =====================================================================
   function renderTable() {
@@ -1959,7 +1918,7 @@
 
   function init() {
     $$('.tabs button').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
-    bindPunchTab(); bindPartTab(); bindSimTab(); bindDiesTab(); bindTurretTab();
+    bindPunchTab(); bindPartTab(); bindSimTab(); bindDiesTab();
     showVersion();
     window.addEventListener('hashchange', () => { if (/^#g=/.test(location.hash) || VIEW) location.reload(); });
     if (VIEW) {
@@ -1969,9 +1928,9 @@
         '<a href="' + esc(location.pathname) + '">Открыть весь сайт</a>';
       setTab('sim'); return;
     }
-    setTab(['punch', 'part', 'sim', 'dies', 'turret', 'table'].indexOf(ST.ui.tab) >= 0 ? ST.ui.tab : 'part');
+    setTab(['punch', 'part', 'sim', 'dies', 'table'].indexOf(ST.ui.tab) >= 0 ? ST.ui.tab : 'part');
   }
 
-  LG.UI = { ST, resolve, PLAYER, setTab, turretCalc, rec: REC };
+  LG.UI = { ST, resolve, PLAYER, setTab, rec: REC };
   document.addEventListener('DOMContentLoaded', init);
 })();
