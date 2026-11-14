@@ -467,3 +467,8 @@ thead th { font: 600 11.5px var(--f-body); text-transform: uppercase; letter-spa
   #tab-part .side-stack > .card:first-child > .row.between button { min-height: 32px; padding: 4px 9px; font-size: 13px; }
   #tab-part .side-stack > .card:first-child > p.muted.small { display: none; }
 }
+
+/* Отсчёт перед записью видео: поверх 3D-вида, клики проходят сквозь — вид можно крутить */
+.rec-count { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; pointer-events: none; z-index: 2; }
+.rec-count b { font: 800 84px/1 var(--f-display); color: var(--accent); text-shadow: 0 2px 12px var(--card); }
+.rec-count span { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 5px 12px; font-size: 13px; box-shadow: var(--shadow); }

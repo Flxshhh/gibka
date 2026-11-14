@@ -1433,21 +1433,59 @@
     PLAYER.rec = null;
     setTimeout(() => { if (r.state !== 'inactive') r.stop(); }, 300);   // дать дописать последний кадр
   }
+  // Кадр для видео: картинка 3D-вида плюс подпись — логотип wirken и адрес сайта. Пишется этот составной кадр,
+  // поэтому подпись есть в самом файле, а на экране её нет.
+  const REC = { canvas: null, logo: null, timer: null };
+  function recFrame() {
+    const cv = $('#sim3d canvas'), c = REC.canvas;
+    if (!cv || !c) return;
+    if (c.width !== cv.width || c.height !== cv.height) { c.width = cv.width; c.height = cv.height; }
+    const g = c.getContext('2d'), W = c.width, H = c.height, u = Math.max(12, Math.round(H * 0.045));
+    g.fillStyle = '#ffffff'; g.fillRect(0, 0, W, H);
+    g.drawImage(cv, 0, 0, W, H);
+    // полоса подписи внизу
+    const bh = Math.round(u * 2.1), pad = Math.round(u * 0.9);
+    g.fillStyle = 'rgba(255,255,255,.92)'; g.fillRect(0, H - bh, W, bh);
+    g.fillStyle = '#dfe4ea'; g.fillRect(0, H - bh, W, Math.max(1, Math.round(u * 0.06)));
+    let x = pad; const cy = H - bh / 2;
+    const lg = REC.logo;
+    if (lg && lg.complete && lg.naturalWidth) { const lh = Math.round(u * 1.15), lw = Math.round(lh * lg.naturalWidth / lg.naturalHeight); g.drawImage(lg, x, Math.round(cy - lh / 2), lw, lh); x += lw + pad; }
+    else { g.fillStyle = '#115398'; g.font = '800 ' + Math.round(u * 1.1) + 'px Manrope, Inter, Arial, sans-serif'; g.textBaseline = 'middle'; g.textAlign = 'left'; g.fillText('wirken', x, cy); x += g.measureText('wirken').width + pad; }
+    g.textBaseline = 'middle';
+    g.fillStyle = '#115398'; g.font = '600 ' + Math.round(u * 0.8) + 'px Inter, Arial, sans-serif'; g.textAlign = 'right';
+    g.fillText('wirkenrus.com', W - pad, cy);
+    const nm = (ST.part.name || '').trim();
+    if (nm && nm !== 'Новая деталь') {
+      g.fillStyle = '#64707d'; g.font = '500 ' + Math.round(u * 0.7) + 'px Inter, Arial, sans-serif'; g.textAlign = 'left';
+      const maxW = W - pad - g.measureText('wirkenrus.com').width - pad * 2 - x; let t = nm;
+      while (t.length > 3 && g.measureText(t).width > maxW) t = t.slice(0, -2);
+      if (maxW > u * 3) g.fillText(t === nm ? t : t + '…', x, cy);
+    }
+  }
+  function recCancel() {
+    clearTimeout(REC.timer); REC.timer = null;
+    const ov = $('#recCount'); if (ov) ov.remove();
+    const btn = $('#recBtn'); btn.innerHTML = ic('rec') + 'Видео'; btn.classList.remove('rec');
+  }
   function recordVideo() {
-    if (PLAYER.rec) { PLAYER.pause(); return; }
+    if (REC.timer) { recCancel(); toast('Запись отменена'); return; }      // нажали во время отсчёта
+    if (PLAYER.rec) { PLAYER.pause(); return; }                            // нажали во время записи — стоп
     if (!PLAYER.plan || !PLAYER.plan.steps.length) { toast('Сначала нужна деталь с гибами'); return; }
-    const go = () => {
+    const start = () => {
       const cv = $('#sim3d canvas');
-      if (!cv || !cv.captureStream || typeof MediaRecorder === 'undefined') { toast('Этот браузер не умеет записывать видео — воспользуйтесь записью экрана телефона', 5000); return; }
+      if (!REC.canvas) REC.canvas = document.createElement('canvas');
+      if (!REC.logo) { REC.logo = new Image(); REC.logo.src = 'img/logo.png'; }
       const mime = ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm'].find(m => MediaRecorder.isTypeSupported(m));
-      let rec;
-      try { rec = new MediaRecorder(cv.captureStream(30), mime ? { mimeType: mime, videoBitsPerSecond: 5e6 } : undefined); }
-      catch (err) { toast('Запись видео не запустилась: ' + err.message, 5000); return; }
-      const chunks = [], btn = $('#recBtn'), bg = sim3d.scene.background;
+      PLAYER.pause(); PLAYER.t = 0;
       sim3d.scene.background = new THREE.Color(0xffffff);   // у холста прозрачный фон — в видео он был бы чёрным
+      PLAYER.recDraw = recFrame; drawFrame();
+      let rec;
+      try { rec = new MediaRecorder(REC.canvas.captureStream(30), mime ? { mimeType: mime, videoBitsPerSecond: 5e6 } : undefined); }
+      catch (err) { PLAYER.recDraw = null; sim3d.scene.background = null; sim3d.render(); recCancel(); toast('Запись видео не запустилась: ' + err.message, 5000); return; }
+      const chunks = [], btn = $('#recBtn');
       rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
       rec.onstop = () => {
-        sim3d.scene.background = bg; sim3d.render();
+        PLAYER.recDraw = null; sim3d.scene.background = null; sim3d.render();
         btn.innerHTML = ic('rec') + 'Видео'; btn.classList.remove('rec');
         if (!chunks.length) { toast('Видео не записалось', 4000); return; }
         const type = rec.mimeType || mime || 'video/webm', a = document.createElement('a');
@@ -1457,10 +1495,25 @@
         setTimeout(() => URL.revokeObjectURL(a.href), 60000);
         toast('Видео сохранено: ' + a.download, 4000);
       };
-      PLAYER.pause(); PLAYER.t = 0; drawFrame();
       PLAYER.rec = rec; rec.start();
       btn.innerHTML = ic('stop') + 'Стоп'; btn.classList.add('rec');
       PLAYER.play();
+    };
+    // Отсчёт 3 секунды: за это время можно повернуть и приблизить вид так, как он должен быть в видео
+    const go = () => {
+      const cv = $('#sim3d canvas');
+      if (!cv || !document.createElement('canvas').captureStream || typeof MediaRecorder === 'undefined') { toast('Этот браузер не умеет записывать видео — воспользуйтесь записью экрана телефона', 5000); return; }
+      PLAYER.pause(); PLAYER.t = 0; drawFrame();
+      const btn = $('#recBtn'); btn.innerHTML = ic('x') + 'Отмена'; btn.classList.add('rec');
+      let ov = $('#recCount');
+      if (!ov) { ov = document.createElement('div'); ov.id = 'recCount'; ov.className = 'rec-count'; $('.sim-wrap').appendChild(ov); }
+      let n = 3;
+      const tick = () => {
+        if (n === 0) { REC.timer = null; ov.remove(); start(); return; }
+        ov.innerHTML = '<b>' + n + '</b><span>Запись начнётся через ' + n + ' с — поверните вид, как нужно</span>';
+        n--; REC.timer = setTimeout(tick, 1000);
+      };
+      tick();
     };
     if (PLAYER.d3 && sim3d && sim3d.ok) go(); else set3d(true, go);
   }
@@ -1471,13 +1524,15 @@
     const moving = ['punch', 'tang', 'holder'];
     if (v.key !== PLAYER.key) {
       v.key = PLAYER.key;
-      v.setPart('pad', sim.pad, Lt, { color: 0xc4cad2, edges: true, metal: 0.2 });
-      v.setPart('die', sim.die.poly, Lt, { color: 0x8d97a3, edges: true });
-      v.setPart('punch', sim.punchLocal, Lt, { color: 0x9aa3ad, edges: true });
-      v.setPart('tang', sim.tangLocal, Lt, { color: 0x9aa3ad, edges: true });
-      v.setPart('holder', G.rect(sim.tangCx - m.holderW / 2, H, sim.tangCx + m.holderW / 2, H + Math.min(m.holderH, 70)), Lt, { color: 0xc4cad2, edges: true, metal: 0.2 });
+      // Инструмент светлый, лист — насыщенный синий: лист сразу читается на фоне пуансона и матрицы
+      const TOOL = { color: 0xe9edf2, edges: true, edgeColor: 0x4a5662, metal: 0.05 };
+      v.setPart('pad', sim.pad, Lt, { color: 0xd3d9e0, edges: true, edgeColor: 0x4a5662, metal: 0.05 });
+      v.setPart('die', sim.die.poly, Lt, { color: 0xdde3ea, edges: true, edgeColor: 0x4a5662, metal: 0.05 });
+      v.setPart('punch', sim.punchLocal, Lt, TOOL);
+      v.setPart('tang', sim.tangLocal, Lt, TOOL);
+      v.setPart('holder', G.rect(sim.tangCx - m.holderW / 2, H, sim.tangCx + m.holderW / 2, H + Math.min(m.holderH, 70)), Lt, { color: 0xf3f5f8, edges: true, edgeColor: 0x4a5662, metal: 0.05 });
       moving.forEach(n => { v.parts[n].position.y = PLAYER.openY || sim.tipOpen; });
-      v.setPart('sheet', sheet, L, { color: 0xf0b429, metal: 0.15 });
+      v.setPart('sheet', sheet, L, { color: 0x1565c0, metal: 0.1 });
       v.setPart('gauge', null);
       // размерная линия длины гиба — перед матрицей, со стороны оператора
       const bd = G.bounds(sim.die.poly), dx = Math.min(bd.x0, -m.padW / 2) - 18, dy = 0, tk = 10;
@@ -1488,9 +1543,10 @@
       v.fit(1.45);
     }
     moving.forEach(n => { v.parts[n].position.y = tip; });
-    v.setPart('sheet', sheet, L, { color: hits.length ? 0xff3b30 : 0xf0b429, metal: 0.15, edges: true, edgeColor: hits.length ? 0x8a0f0a : 0x9a6a00 });
+    v.setPart('sheet', sheet, L, { color: hits.length ? 0xff3b30 : 0x1565c0, metal: 0.1, edges: true, edgeColor: hits.length ? 0x8a0f0a : 0x0a3a78 });
     v.setPart('gauge', showStop && s.stop != null ? G.rect(s.stop, sim.dieTop - 6, s.stop + 8, sim.dieTop + ST.part.S + 18) : null, Math.min(L, 160), { color: 0xc98a2b, edges: true });
     v.render();
+    if (PLAYER.recDraw) PLAYER.recDraw();
     return true;
   }
 
@@ -1916,6 +1972,6 @@
     setTab(['punch', 'part', 'sim', 'dies', 'turret', 'table'].indexOf(ST.ui.tab) >= 0 ? ST.ui.tab : 'part');
   }
 
-  LG.UI = { ST, resolve, PLAYER, setTab, turretCalc };
+  LG.UI = { ST, resolve, PLAYER, setTab, turretCalc, rec: REC };
   document.addEventListener('DOMContentLoaded', init);
 })();
