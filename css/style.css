@@ -403,25 +403,29 @@ thead th { font: 600 11.5px var(--f-body); text-transform: uppercase; letter-spa
   .pc-sub { color: #444; }
   .pc-cols { display: grid; grid-template-columns: 1.15fr 1fr; gap: 12px; align-items: start; }
   .pc-kv { border-collapse: collapse; width: 100%; }
+  .pc-kv th, .pc-kv td { padding-block: 2px !important; }
   .pc-kv th { text-align: left; font: 400 10.5pt 'Inter', Arial, sans-serif; text-transform: none; letter-spacing: 0; color: #555; padding: 3px 10px 3px 0; white-space: nowrap; vertical-align: top; }
   .pc-kv td { padding: 3px 0; }
-  .pc-profile { width: 100%; max-height: 62mm; border: 1px solid #ccc; }
-  .pc-h { font: 700 11.5pt 'Manrope', Arial, sans-serif; color: #115398; margin: 12px 0 4px; }
+  .pc-profile { width: 100%; max-height: 44mm; border: 1px solid #ccc; }
+  .pc-h { font: 700 11.5pt 'Manrope', Arial, sans-serif; color: #115398; margin: 9px 0 3px; }
   .print-card .strip { width: 100%; max-height: 16mm; }
   .pc-chips { display: flex; flex-wrap: wrap; gap: 4px 14px; font-family: 'JetBrains Mono', monospace; font-size: 9.5pt; }
   .pc-steps { border-collapse: collapse; width: 100%; }
-  .pc-steps th, .pc-steps td { border: 1px solid #999; padding: 5px 7px; text-align: left; vertical-align: top; }
+  .pc-steps th, .pc-steps td { border: 1px solid #999; padding: 4px 6px; text-align: left; vertical-align: top; }
   .pc-steps th { background: #eef2f6; font: 600 9.5pt 'Inter', Arial, sans-serif; text-transform: none; letter-spacing: 0; color: #000; }
   .pc-steps tr { break-inside: avoid; }
   .pc-box { width: 9mm; }
-  .pc-pic { width: 50mm; padding: 2px !important; }
-  .pc-step { display: block; width: 50mm; height: 36mm; }
-  .pc-step .ps-tool { fill: #b9c0c8; stroke: #5f6a75; stroke-width: 1; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
-  .pc-step .ps-mach { fill: #e3e7eb; stroke: #9aa3ad; stroke-width: 1; vector-effect: non-scaling-stroke; }
-  .pc-step .ps-sheet { fill: #fff; stroke: #111; stroke-width: 1.6; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
-  .pc-step .ps-ghost { fill: none; stroke: #115398; stroke-width: 1.1; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
-  .pc-step .ps-face { fill: none; stroke: #f0a800; stroke-width: 2.2; vector-effect: non-scaling-stroke; }
-  .pc-step .ps-gauge { fill: #b9772a; stroke: none; }
+  .pc-pic { width: 62mm; padding: 2px !important; }
+  .pc-figs { display: grid; grid-template-columns: 1fr 1fr; gap: 2mm; }
+  .pc-fig { margin: 0; display: grid; gap: 1px; justify-items: center; }
+  .pc-fig figcaption { font-size: 7.5pt; color: #555; }
+  .pc-step { display: block; width: 100%; height: 38mm; }
+  /* цвета как в симуляции на экране */
+  .pc-step .ps-tool { fill: #979da3; stroke: #6f767c; stroke-width: .8; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+  .pc-step .ps-mach { fill: #c4cad2; stroke: #9ea5ad; stroke-width: .8; vector-effect: non-scaling-stroke; }
+  .pc-step .ps-sheet { fill: #ffffff; stroke: #2f3437; stroke-width: 1.3; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+  .pc-step .ps-face { fill: none; stroke: #ffb300; stroke-width: 1.6; vector-effect: non-scaling-stroke; }
+  .pc-step .ps-gauge { fill: #ce9549; stroke: none; }
   .pc-step .ps-t { fill: #333; font-family: 'JetBrains Mono', monospace; }
   .pc-legend { margin-top: 6px; color: #555; font-size: 8.5pt; }
   .pc-warn { border: 1px solid #c00; color: #c00; padding: 5px 8px; margin-bottom: 6px; font-weight: 600; }

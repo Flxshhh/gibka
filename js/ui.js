@@ -1111,20 +1111,29 @@
   }
 
   // Картинка шага для карты гибки: лист перед гибом (сплошной), после гиба (пунктир), пуансон на листе, матрица и задний упор
-  function stepPicture(sim, done, s) {
+  // Картинки шага для карты гибки — как в симуляции: лист металлом (белый с тёмным контуром, жёлтая сторона вверх),
+  // пуансон целиком с хвостовиком, матрица, задний упор. Две картинки: лист уложен (пуансон коснулся) и гиб готов.
+  function stepPictures(sim, done, s) {
     const p0 = sim.place(sim.fracs(done, s.bend, 0), s.bend, s.mirror), p1 = sim.place(sim.fracs(done, s.bend, 1), s.bend, s.mirror);
-    const t = sim.tools(p0.tipY), V = sim.ctx.die.V, S = sim.ctx.S;
+    const t0 = sim.tools(p0.tipY), t1 = sim.tools(p1.tipY), V = sim.ctx.die.V, S = sim.ctx.S, H = sim.punchInfo.H;
+    // общие границы для обеих картинок: лист в обоих положениях, пуансон целиком (с хвостовиком и низом зажима), верх матрицы, упор
     let b = G.bounds(p1.poly, G.bounds(p0.poly));
-    b = G.bounds([{ x: -V * 1.2 - 8, y: sim.dieTop - Math.max(V, 14) }, { x: V * 1.2 + 8, y: p0.tipY + Math.max(30, V * 1.5) }], b);
-    if (s.stop != null) b = G.bounds([{ x: s.stop + 8, y: sim.dieTop }], b);
-    const m = Math.max(b.x1 - b.x0, b.y1 - b.y0) * 0.05 + 2, fs = Math.max(b.x1 - b.x0, (b.y1 - b.y0) * 1.35) / 22;
-    let h = SV.path(sim.pad, 'ps-mach') + SV.path(sim.die.poly, 'ps-tool') + SV.path(t.holder, 'ps-mach') + SV.path(t.tang, 'ps-mach') + SV.path(t.punch, 'ps-tool') +
-      SV.path(p1.poly, 'ps-ghost') + SV.path(p0.poly, 'ps-sheet') + SV.path(s.face === 'A' ? p0.A : p0.B, 'ps-face', false);
-    if (s.stop != null) {
-      h += SV.path(G.rect(s.stop, sim.dieTop - fs * 0.3, s.stop + fs * 0.5, sim.dieTop + S + fs * 1.1), 'ps-gauge');
-      h += SV.text({ x: s.stop, y: sim.dieTop - fs * 1.1 }, fmt(s.stop, 1), fs, 'ps-t', 'end');
-    }
-    return '<svg class="pc-step" viewBox="' + SV.viewBox({ x0: b.x0 - m, x1: b.x1 + m, y0: b.y0 - m, y1: b.y1 + m }, 0) + '" preserveAspectRatio="xMidYMid meet">' + h + '</svg>';
+    b = G.bounds(t0.punch.concat(t0.tang, t1.punch), b);
+    b = G.bounds([{ x: sim.tangCx, y: p0.tipY + H + Math.min(25, sim.ctx.machine.holderH) }], b);
+    b = G.bounds([{ x: -V * 1.3 - 6, y: sim.dieTop - Math.max(V * 1.4, 14) }, { x: V * 1.3 + 6, y: sim.dieTop }], b);
+    if (s.stop != null) b = G.bounds([{ x: s.stop + 10, y: sim.dieTop }], b);
+    const w = b.x1 - b.x0, hgt = b.y1 - b.y0, m = Math.max(w, hgt) * 0.04 + 2, fs = Math.max(w, hgt) / 16;
+    const vb = SV.viewBox({ x0: b.x0 - m, x1: b.x1 + m, y0: b.y0 - m, y1: b.y1 + m }, 0);
+    const pic = (pl, t, label, gauge) => {
+      let h = SV.path(sim.pad, 'ps-mach') + SV.path(sim.die.poly, 'ps-tool') + SV.path(t.holder, 'ps-mach') + SV.path(t.tang, 'ps-mach') + SV.path(t.punch, 'ps-tool') +
+        SV.path(pl.poly, 'ps-sheet') + SV.path(s.face === 'A' ? pl.A : pl.B, 'ps-face', false);
+      if (gauge && s.stop != null) {
+        h += SV.path(G.rect(s.stop, sim.dieTop - fs * 0.25, s.stop + fs * 0.4, sim.dieTop + S + fs * 0.9), 'ps-gauge');
+        h += SV.text({ x: s.stop + fs * 0.2, y: sim.dieTop - fs * 0.9 }, fmt(s.stop, 1), fs * 0.85, 'ps-t', 'middle');
+      }
+      return '<figure class="pc-fig"><svg class="pc-step" viewBox="' + vb + '" preserveAspectRatio="xMidYMax meet">' + h + '</svg><figcaption>' + label + '</figcaption></figure>';
+    };
+    return '<div class="pc-figs">' + pic(p0, t0, 'уложен', true) + pic(p1, t1, 'готово', false) + '</div>';
   }
 
   // Карта гибки для печати или сохранения в PDF: всё, что нужно оператору, на одном листе
@@ -1147,14 +1156,14 @@
     h += '<div class="pc-h">Развёртка: линии гиба от начала заготовки (отрезок 1)</div>' + flatStrip(r.an) +
       '<div class="pc-chips">' + r.an.bends.map(b => '<span>Г' + (b.i + 1) + ' — ' + fmt(b.pos, 2) + ' мм</span>').join('') + '</div>';
     h += '<div class="pc-h">Порядок гибов</div>' + (pl.ok ? '' : '<div class="pc-warn">Внимание: в этом порядке есть столкновения — см. отметки в таблице.</div>') +
-      '<table class="pc-steps"><thead><tr><th>Шаг</th><th>Гиб</th><th>Угол</th><th>Как лежит лист</th><th>Действие</th><th>К упору</th><th>Упор, мм</th><th>✓</th></tr></thead><tbody>' +
+      '<table class="pc-steps"><thead><tr><th>Шаг</th><th>Гиб</th><th>Угол</th><th>Гибка</th><th>Действие</th><th>К упору</th><th>Упор, мм</th><th>✓</th></tr></thead><tbody>' +
       pl.steps.map((s, k) => '<tr><td>' + (k + 1) + '</td><td>Г' + (s.bend + 1) + '</td><td>' + fmt(r.an.bends[s.bend].incl, 0) + '°</td><td class="pc-pic">' +
-        (PLAYER.sim ? stepPicture(PLAYER.sim, pl.steps.slice(0, k).map(x => x.bend), s) : '') + '</td><td>' +
+        (PLAYER.sim ? stepPictures(PLAYER.sim, pl.steps.slice(0, k).map(x => x.bend), s) : '') + '</td><td>' +
         (s.notes.map(esc).join('<br>') || 'то же положение') + (s.hits.length ? '<br><b>' + esc(hitList(s)) + '</b>' : '') + '</td><td>' + esc(s.backEdge) + '</td><td><b>' +
         (s.stop != null ? fmt(s.stop, 1) : '—') + '</b></td><td class="pc-box"></td></tr>').join('') + '</tbody></table>';
     const msgs = r.an.warnings.map(esc);
     if (msgs.length) h += '<div class="pc-h">Замечания</div><ul class="pc-notes">' + msgs.map(m => '<li>' + m + '</li>').join('') + '</ul>';
-    h += '<div class="pc-legend">На рисунках: слева оператор, справа задний упор. Сплошной контур — лист перед гибом, пунктир — после гиба, жёлтая линия — сторона листа вверх, коричневая планка — упор.</div>';
+    h += '<div class="pc-legend">На рисунках: слева оператор, справа задний упор. «Уложен» — лист на матрице, пуансон коснулся; «готово» — гиб выполнен. Жёлтая линия — сторона листа вверх, коричневая планка — упор с размером.</div>';
     h += '<div class="pc-foot">Упор — расстояние от оси пуансона до заднего упора. Расчёт справочный: первый гиб проверяйте на образце. · wirkenrus.com · +7 962 696-59-74</div>';
     $('#printCard').innerHTML = h;
     // печатаем всегда в светлой теме; логотип должен успеть загрузиться
