@@ -34,6 +34,7 @@
     machine: Object.assign(clone(LG.DEFAULT_MACHINE), load('machine', {})),
     parts: load('parts', []),
     part: Object.assign(clone(LG.DEFAULT_PART), load('part', {})),
+    turret: Object.assign({ sys: 'tt', material: 'Fe', S: 1.5, shape: 'round', a: 10, b: 5, ton: 20, qty: 1 }, load('turret', {})),
     ui: Object.assign({ tab: 'part', pview: 'draw', segMode: 'straight', segAngle: 45, segLen: 20, editPunch: null, editDie: null }, load('ui', {}), { punchQ: '', dieQ: '' })
   };
   // Пуансоны старого формата (до схемы WIRKEN) заменяем стандартными
@@ -102,7 +103,7 @@
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
       store('punches', ST.punches); store('dies', ST.dies); store('machine', ST.machine);
-      store('parts', ST.parts); store('part', ST.part); store('ui', ST.ui);
+      store('parts', ST.parts); store('part', ST.part); store('ui', ST.ui); store('turret', ST.turret);
     }, 200);
   }
 
@@ -206,6 +207,7 @@
     if (obj === 'part') return ST.part;
     if (obj === 'machine') return ST.machine;
     if (obj === 'ui') return ST.ui;
+    if (obj === 'turret') return ST.turret;
     if (obj === 'punch') return isCat(ST.ui.editPunch) ? null : findPunch(ST.ui.editPunch);   // каталог не меняем
     if (obj === 'die') return isCat(ST.ui.editDie) ? null : findDie(ST.ui.editDie);
     if (obj.indexOf('seg:') === 0) return ST.part.segs[+obj.slice(4)];
@@ -236,6 +238,7 @@
     }
     else if (obj === 'die') { renderDieView(); renderDieSide(); }
     else if (obj === 'machine') renderDieView();
+    else if (obj === 'turret') renderTurretOut();
     else if (obj === 'part' || obj.indexOf('seg:') === 0) {
       if (ST.ui.tab === 'part') renderPartOutputs();
       if (ST.ui.tab === 'sim') renderSimOutputs();
@@ -281,6 +284,7 @@
     if (t === 'sim') renderSimTab();
     if (t === 'dies') renderDiesTab();
     if (t === 'table') renderTable();
+    if (t === 'turret') renderTurretTab();
   }
 
   // =====================================================================
@@ -1721,6 +1725,137 @@
   }
 
   // =====================================================================
+  // ПРОБИВКА: подбор инструмента для координатно-пробивного пресса
+  // =====================================================================
+  const T_SHAPES = { round: ['Круг', 'Диаметр, мм'], square: ['Квадрат', 'Сторона, мм'], rect: ['Прямоугольник', 'Длина, мм', 'Ширина, мм'], oblong: ['Овал (паз)', 'Длина, мм', 'Ширина, мм'] };
+
+  // Расчёт по отверстию: периметр реза, описанная окружность, зазор, размер матрицы, усилие, станция, проверки
+  function turretCalc(t) {
+    const TT = LG.TURRET, S = Math.max(0.1, +t.S || 1), mat = LG.MATERIALS[t.material] ? t.material : 'Fe';
+    let a = Math.max(0.1, +t.a || 1), b = Math.max(0.1, +t.b || 1);
+    if ((t.shape === 'rect' || t.shape === 'oblong') && b > a) [a, b] = [b, a];   // длина — большая сторона
+    if (t.shape === 'round' || t.shape === 'square') b = a;
+    const per = t.shape === 'round' ? Math.PI * a : t.shape === 'square' ? 4 * a : t.shape === 'rect' ? 2 * (a + b) : 2 * (a - b) + Math.PI * b;
+    const diag = t.shape === 'round' || t.shape === 'oblong' ? a : Math.hypot(a, b);
+    const row = TT.clearance[mat].find(r => S <= r[0] + 1e-9) || TT.clearance[mat][TT.clearance[mat].length - 1];
+    const pct = row[1], cl = Math.round(pct * S * 100) / 100;          // полный зазор, мм
+    const tau = LG.MATERIALS[mat].R * TT.shearK, kN = per * S * tau / 1000, ton = kN / 9.81;
+    const sys = TT.systems[t.sys] || TT.systems.tt;
+    const st = sys.stations.find(x => diag <= x[1] + 1e-9) || null;
+    const minDim = TT.minSize[mat] * S, small = Math.min(a, b);
+    const warn = [], bad = [];
+    if (!st) bad.push('Пуансон с описанной окружностью ' + fmt(diag, 1) + ' мм не помещается ни в одну станцию ' + sys.name + ' (наибольшая — ' + fmt(sys.stations[sys.stations.length - 1][1], 1) + ' мм). Такое отверстие вырубают по контуру пуансоном меньшего размера.');
+    if (small + 1e-9 < minDim) bad.push('Размер ' + fmt(small, 2) + ' мм меньше допустимого для ' + LG.MATERIALS[mat].name.split(',')[0].split(' (')[0].toLowerCase() + ' ' + fmt(S, 2) + ' мм: нужно не меньше ' + fmt(minDim, 2) + ' мм (' + fmt(TT.minSize[mat], 2) + ' × толщина), иначе пуансон ломается.');
+    const press = +t.ton || 0;
+    if (press > 0 && ton > press) bad.push('Усилие ' + fmt(ton, 1) + ' т больше, чем может пресс (' + fmt(press, 0) + ' т). Нужен пуансон со скосом или вырубка в несколько ударов.');
+    else if (press > 0 && ton > 0.8 * press) warn.push('Усилие ' + fmt(ton, 1) + ' т — больше 80 % от возможностей пресса (' + fmt(press, 0) + ' т). Лучше пуансон со скосом.');
+    return { S, mat, a, b, per, diag, pct, cl, tau, kN, ton, sys, st, minDim, warn, bad, shape: t.shape };
+  }
+  // Контур пуансона или окна матрицы (grow — прибавка на сторону)
+  function turretShape(c, grow) {
+    const a = c.a + 2 * grow, b = c.b + 2 * grow;
+    if (c.shape === 'round') return G.arc({ x: 0, y: 0 }, a / 2, 0, 2 * Math.PI, 5).slice(0, -1);
+    if (c.shape === 'oblong') { const r = b / 2, h = (a - b) / 2; return G.arc({ x: h, y: 0 }, r, -Math.PI / 2, Math.PI / 2, 6).concat(G.arc({ x: -h, y: 0 }, r, Math.PI / 2, 1.5 * Math.PI, 6)); }
+    return G.rect(-a / 2, -b / 2, a / 2, b / 2);
+  }
+  const turretSize = (c, add) => c.shape === 'round' ? 'Ø' + fmt(c.a + add, 2) : c.shape === 'square' ? fmt(c.a + add, 2) + ' × ' + fmt(c.a + add, 2) : fmt(c.a + add, 2) + ' × ' + fmt(c.b + add, 2);
+
+  function renderTurretTab() {
+    const t = ST.turret, sh = T_SHAPES[t.shape] || T_SHAPES.round;
+    const sel = (id, opts, cur) => '<select id="' + id + '">' + opts.map(o => '<option value="' + o[0] + '"' + (o[0] === cur ? ' selected' : '') + '>' + o[1] + '</option>').join('') + '</select>';
+    $('#turretForm').innerHTML =
+      '<div class="field"><label>Система инструмента</label>' + sel('tSys', Object.keys(LG.TURRET.systems).map(k => [k, LG.TURRET.systems[k].name]), t.sys) + '</div>' +
+      '<div class="field"><label>Материал</label>' + sel('tMat', Object.keys(LG.MATERIALS).map(k => [k, LG.MATERIALS[k].name]), t.material) + '</div>' +
+      stepper('turret', 'S', t.S, 0.1, 0.1, 2, 'Толщина листа S, мм') +
+      '<div class="field"><label>Форма отверстия</label>' + sel('tShape', Object.keys(T_SHAPES).map(k => [k, T_SHAPES[k][0]]), t.shape) + '</div>' +
+      stepper('turret', 'a', t.a, 0.5, 0.1, 2, sh[1]) +
+      (sh[2] ? stepper('turret', 'b', t.b, 0.5, 0.1, 2, sh[2]) : '') +
+      stepper('turret', 'ton', t.ton, 1, 0, 0, 'Усилие пресса, т (0 — не проверять)') +
+      '<div class="field"><button type="button" id="tFromPart" title="Взять толщину и материал из детали в конструкторе">' + ic('copy') + 'Лист как в детали</button></div>';
+    renderTurretOut();
+  }
+
+  function renderTurretOut() {
+    if (ST.ui.tab !== 'turret') return;
+    const t = ST.turret, c = turretCalc(t), TT = LG.TURRET, matName = LG.MATERIALS[c.mat].name.split(',')[0];
+    let h = '<div class="kv">' +
+      kv('Станция', c.st ? '<b>' + esc(c.sys.name) + ' · ' + c.st[0] + '</b> <span class="muted">(до ' + fmt(c.st[1], 2) + ' мм)</span>' : '<b class="bad">не помещается</b>') +
+      kv('Пуансон', '<b>' + turretSize(c, 0) + ' мм</b> <span class="muted">' + T_SHAPES[c.shape][0].toLowerCase() + '</span>') +
+      kv('Матрица', '<b>' + turretSize(c, c.cl) + ' мм</b>') +
+      kv('Зазор', fmt(c.pct * 100, 0) + ' % от S = <b>' + fmt(c.cl, 2) + ' мм</b> <span class="muted">(по ' + fmt(c.cl / 2, 3) + ' на сторону)</span>') +
+      kv('Описанная окружность', fmt(c.diag, 2) + ' мм') +
+      kv('Периметр реза', fmt(c.per, 1) + ' мм') +
+      kv('Усилие', '<b class="' + (c.bad.some(x => /Усилие/.test(x)) ? 'bad' : '') + '">' + fmt(c.kN, 1) + ' кН ≈ ' + fmt(c.ton, 2) + ' т</b>') +
+      '</div>';
+    h += '<div class="small muted" style="margin-top:8px">Усилие = периметр × толщина × сопротивление срезу (' + fmt(c.tau, 0) + ' Н/мм² для материала «' + esc(matName) + '»).</div>';
+    const msgs = c.bad.map(e => '<li class="bad">' + esc(e) + '</li>').concat(c.warn.map(w => '<li class="warn">' + esc(w) + '</li>'));
+    if (msgs.length) h += '<ul class="msgs">' + msgs.join('') + '</ul>';
+    else h += '<div class="status good" style="margin-top:10px">' + ic('check') + 'Отверстие пробивается стандартным инструментом</div>';
+    h += '<div class="sugg"><div class="small"><b>Расстояния для листа ' + fmt(c.S, 2) + ' мм</b></div><div class="kv">' +
+      kv('Между отверстиями', 'не меньше ' + fmt(2 * c.S, 1) + ' мм <span class="muted">(2 × S)</span>') +
+      kv('До края листа', 'не меньше ' + fmt(2 * c.S, 1) + ' мм <span class="muted">(2 × S)</span>') +
+      kv('До линии гиба', 'не меньше ' + fmt(2.5 * c.S, 1) + ' мм + радиус гиба <span class="muted">(иначе отверстие вытянется)</span>') +
+      '</div></div>';
+    $('#turretOut').innerHTML = h;
+
+    // чертёж: пуансон, окно матрицы (пунктир) и описанная окружность
+    const pp = turretShape(c, 0), dd = turretShape(c, c.cl / 2), R = c.diag / 2, fs = Math.max(c.diag, 6) / 14;
+    let s = SV.circle({ x: 0, y: 0 }, R, 't-circ') + SV.path(dd, 't-die') + SV.path(pp, 'm-punch');
+    s += SV.dim({ x: -c.a / 2, y: -c.b / 2 }, { x: c.a / 2, y: -c.b / 2 }, -fs * 1.6 - (R - c.b / 2), fmt(c.a, 2), fs);
+    if (c.shape === 'rect' || c.shape === 'oblong') s += SV.dim({ x: c.a / 2, y: -c.b / 2 }, { x: c.a / 2, y: c.b / 2 }, -fs * 1.6 - (R - c.a / 2), fmt(c.b, 2), fs);
+    s += SV.text({ x: 0, y: R + fs * 1.5 }, 'описанная окружность ' + fmt(c.diag, 1), fs * 0.75, 'lbl-s');
+    s += SV.text({ x: 0, y: 0 }, 'зазор ' + fmt(c.cl, 2), fs * 0.8, 'lbl');
+    const pad = fs * 4;
+    $('#turretSvg').setAttribute('viewBox', SV.viewBox({ x0: -R - pad, x1: R + pad, y0: -R - pad, y1: R + pad }, 0));
+    $('#turretSvg').innerHTML = s;
+
+    // таблицы: зазоры по материалам и станции выбранной системы
+    const rng = (rows, i) => i === 0 ? 'до ' + fmt(rows[0][0], 1) : rows[i][0] === Infinity ? 'больше ' + fmt(rows[i - 1][0], 1) : fmt(rows[i - 1][0], 1) + ' – ' + fmt(rows[i][0], 1);
+    let tb = '<table class="mini"><thead><tr><th>Материал</th><th>Толщина, мм</th><th>Зазор</th><th>Мин. размер</th></tr></thead><tbody>';
+    Object.keys(TT.clearance).forEach(m => TT.clearance[m].forEach((r, i) => {
+      const cur = m === c.mat && r[1] === c.pct && (TT.clearance[m].find(x => c.S <= x[0] + 1e-9) || TT.clearance[m][TT.clearance[m].length - 1]) === r;
+      tb += '<tr class="' + (cur ? 't-cur' : '') + '"><td>' + (i === 0 ? esc(LG.MATERIALS[m].name.split(',')[0]) : '') + '</td><td>' + rng(TT.clearance[m], i) + '</td><td>' + fmt(r[1] * 100, 0) + ' %</td><td>' +
+        (i === 0 ? fmt(TT.minSize[m], 2) + ' × S' : '') + '</td></tr>';
+    }));
+    tb += '</tbody></table><table class="mini"><thead><tr><th>' + esc(c.sys.name) + '</th><th>Пуансон до, мм</th></tr></thead><tbody>' +
+      c.sys.stations.map(x => '<tr class="' + (c.st && c.st[0] === x[0] ? 't-cur' : '') + '"><td>' + x[0] + '</td><td>' + fmt(x[1], 2) + '</td></tr>').join('') + '</tbody></table>';
+    $('#turretTables').innerHTML = tb;
+  }
+
+  function bindTurretTab() {
+    const root = $('#tab-turret');
+    root.addEventListener('change', e => {
+      const t = ST.turret, id = e.target.id;
+      if (id === 'tSys') t.sys = e.target.value;
+      else if (id === 'tMat') t.material = e.target.value;
+      else if (id === 'tShape') { t.shape = e.target.value; saveAll(); renderTurretTab(); return; }
+      else return;
+      saveAll(); renderTurretOut();
+    });
+    root.addEventListener('click', e => {
+      const t = ST.turret, id = e.target.id;
+      if (id === 'tFromPart') { t.S = ST.part.S; t.material = ST.part.material; saveAll(); renderTurretTab(); toast('Толщина и материал взяты из детали'); return; }
+      if (id === 'turretClose') { $('#turretPanel').hidden = true; return; }
+      if (id === 'turretCopy') { const ta = $('#turretText'); try { navigator.clipboard.writeText(ta.value).then(() => toast('Скопировано'), () => { ta.select(); toast('Текст выделен — скопируйте вручную', 4000); }); } catch (err) { ta.select(); } return; }
+      if (id === 'turretReq') {
+        const c = turretCalc(t), matName = LG.MATERIALS[c.mat].name.split(',')[0];
+        const txt = 'Здравствуйте! Нужен пробивной инструмент:\n' +
+          '— Система: ' + c.sys.name + (c.st ? ', станция ' + c.st[0] : '') + '\n' +
+          '— Пуансон: ' + T_SHAPES[c.shape][0].toLowerCase() + ' ' + turretSize(c, 0) + ' мм\n' +
+          '— Матрица: ' + turretSize(c, c.cl) + ' мм (зазор ' + fmt(c.cl, 2) + ' мм)\n' +
+          'Лист: ' + matName + ' ' + fmt(c.S, 2) + ' мм. Усилие пробивки ≈ ' + fmt(c.ton, 1) + ' т.\n' + 'Прошу сообщить наличие и стоимость.';
+        const pn = $('#turretPanel'); pn.hidden = false;
+        pn.innerHTML = '<div class="row between"><b>Заявка в wirken</b><button type="button" class="ghost sm" id="turretClose" aria-label="Закрыть">' + ic('x') + '</button></div>' +
+          '<textarea id="turretText" class="backup" rows="6">' + esc(txt) + '</textarea>' +
+          '<div class="row"><a class="link-btn primary" id="turretTg" href="#" target="_blank" rel="noopener">' + ic('send') + 'Отправить в Telegram</a>' +
+          '<button type="button" id="turretCopy">' + ic('copy') + 'Скопировать текст</button><a class="link-btn" href="tel:+79626965974">' + ic('phone') + '+7 962 696-59-74</a></div>';
+        const upd = () => { $('#turretTg').href = 'https://t.me/+79626965974?text=' + encodeURIComponent($('#turretText').value).slice(0, 3800); };
+        upd(); $('#turretText').addEventListener('input', upd);
+      }
+    });
+  }
+
+  // =====================================================================
   // ТАБЛИЦА
   // =====================================================================
   function renderTable() {
@@ -1765,7 +1900,7 @@
 
   function init() {
     $$('.tabs button').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
-    bindPunchTab(); bindPartTab(); bindSimTab(); bindDiesTab();
+    bindPunchTab(); bindPartTab(); bindSimTab(); bindDiesTab(); bindTurretTab();
     showVersion();
     window.addEventListener('hashchange', () => { if (/^#g=/.test(location.hash) || VIEW) location.reload(); });
     if (VIEW) {
@@ -1775,9 +1910,9 @@
         '<a href="' + esc(location.pathname) + '">Открыть весь сайт</a>';
       setTab('sim'); return;
     }
-    setTab(['punch', 'part', 'sim', 'dies', 'table'].indexOf(ST.ui.tab) >= 0 ? ST.ui.tab : 'part');
+    setTab(['punch', 'part', 'sim', 'dies', 'turret', 'table'].indexOf(ST.ui.tab) >= 0 ? ST.ui.tab : 'part');
   }
 
-  LG.UI = { ST, resolve, PLAYER, setTab };
+  LG.UI = { ST, resolve, PLAYER, setTab, turretCalc };
   document.addEventListener('DOMContentLoaded', init);
 })();

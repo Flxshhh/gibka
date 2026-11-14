@@ -6,10 +6,10 @@
   <title>Листогиб</title>
   <meta name="description" content="Симулятор гибки листа на листогибочном прессе: пуансоны, матрицы, таблица усилий, развёртка и порядок гибов.">
   <!-- значок сайта и веб-приложения («На экран Домой») -->
-  <link rel="icon" type="image/png" sizes="32x32" href="img/favicon-32.png?v=202611101749">
-  <link rel="icon" type="image/png" sizes="192x192" href="img/icon-192.png?v=202611101749">
-  <link rel="apple-touch-icon" sizes="180x180" href="img/icon-180.png?v=202611101749">
-  <link rel="manifest" href="manifest.webmanifest?v=202611101749">
+  <link rel="icon" type="image/png" sizes="32x32" href="img/favicon-32.png?v=202611141640">
+  <link rel="icon" type="image/png" sizes="192x192" href="img/icon-192.png?v=202611141640">
+  <link rel="apple-touch-icon" sizes="180x180" href="img/icon-180.png?v=202611141640">
+  <link rel="manifest" href="manifest.webmanifest?v=202611141640">
   <meta name="theme-color" content="#115398">
   <meta name="apple-mobile-web-app-title" content="Листогиб">
   <meta name="mobile-web-app-capable" content="yes">
@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <!-- шрифты подгружаются, не задерживая страницу: пока их нет, текст виден системным шрифтом -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" media="print" onload="this.media='all'">
-  <link rel="stylesheet" href="css/style.css?v=202611101749">
+  <link rel="stylesheet" href="css/style.css?v=202611141640">
 </head>
 <body>
   <!-- Набор иконок: линейные значки, цвет берётся от текста кнопки -->
@@ -55,8 +55,8 @@
   </defs></svg>
   <header class="top">
     <a class="brand" href="https://wirkenrus.com" target="_blank" rel="noopener" title="wirkenrus.com">
-      <img class="brand-logo logo-light" src="img/logo.png?v=202611101749" alt="wirken" width="351" height="67">
-      <img class="brand-logo logo-dark" src="img/logo-dark.png?v=202611101749" alt="wirken" width="351" height="67">
+      <img class="brand-logo logo-light" src="img/logo.png?v=202611141640" alt="wirken" width="351" height="67">
+      <img class="brand-logo logo-dark" src="img/logo-dark.png?v=202611141640" alt="wirken" width="351" height="67">
       <h1 class="sr-only">Листогиб — симулятор гибки</h1>
     </a>
     <nav class="tabs">
@@ -64,6 +64,7 @@
       <button type="button" data-tab="part">Конструктор детали</button>
       <button type="button" data-tab="sim">Симуляция</button>
       <button type="button" data-tab="dies">Матрицы и станок</button>
+      <button type="button" data-tab="turret">Пробивка</button>
       <button type="button" data-tab="table">Таблица усилий</button>
     </nav>
     <a class="hdr-phone" href="tel:+79626965974" title="Позвонить, если возникли вопросы">
@@ -257,6 +258,36 @@
       </div>
     </section>
 
+    <!-- ПРОБИВКА: подбор инструмента для координатно-пробивного пресса -->
+    <section class="tab" id="tab-turret" hidden>
+      <div class="side-layout">
+        <aside class="side-stack">
+          <div class="card">
+            <h2>Отверстие и лист</h2>
+            <div id="turretForm" class="form"></div>
+          </div>
+        </aside>
+        <div class="side-stack">
+          <div class="card">
+            <div class="row between">
+              <h2>Подбор пробивного инструмента</h2>
+              <div class="row"><button type="button" id="turretReq" title="Отправить в wirken запрос на этот инструмент"><svg class="ic" aria-hidden="true"><use href="#i-send"/></svg>Заявка в wirken</button></div>
+            </div>
+            <div id="turretPanel" class="sim-panel" hidden></div>
+            <div class="editor">
+              <div id="turretOut"></div>
+              <svg id="turretSvg" class="view tool" preserveAspectRatio="xMidYMid meet"></svg>
+            </div>
+          </div>
+          <div class="card">
+            <h2>Зазор матрицы и станции</h2>
+            <p class="muted small">Подсвечены строки для вашего листа и отверстия. Зазор — полный (на диаметр), в процентах от толщины листа. Это общепринятые рекомендации; под конкретный инструмент уточняйте по каталогу.</p>
+            <div id="turretTables" class="coef"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- ТАБЛИЦА -->
     <section class="tab" id="tab-table" hidden>
       <div class="card wide">
@@ -290,16 +321,16 @@
   <div id="printCard" class="print-card"></div>
 
   <!-- three.js (3D-вид пуансона) подгружается только при открытии 3D — см. ensureThree в js/ui.js -->
-  <script src="js/data.js?v=202611101749"></script>
-  <script src="js/catalog.js?v=202611101749"></script>
-  <script src="js/catalog-dxf.js?v=202611101749"></script>
-  <script src="js/catalog-dies.js?v=202611101749"></script>
-  <script src="js/geom.js?v=202611101749"></script>
-  <script src="js/dxf.js?v=202611101749"></script>
-  <script src="js/calc.js?v=202611101749"></script>
-  <script src="js/svg.js?v=202611101749"></script>
-  <script src="js/sim.js?v=202611101749"></script>
-  <script src="js/view3d.js?v=202611101749"></script>
-  <script src="js/ui.js?v=202611101749"></script>
+  <script src="js/data.js?v=202611141640"></script>
+  <script src="js/catalog.js?v=202611141640"></script>
+  <script src="js/catalog-dxf.js?v=202611141640"></script>
+  <script src="js/catalog-dies.js?v=202611141640"></script>
+  <script src="js/geom.js?v=202611141640"></script>
+  <script src="js/dxf.js?v=202611141640"></script>
+  <script src="js/calc.js?v=202611141640"></script>
+  <script src="js/svg.js?v=202611141640"></script>
+  <script src="js/sim.js?v=202611141640"></script>
+  <script src="js/view3d.js?v=202611141640"></script>
+  <script src="js/ui.js?v=202611141640"></script>
 </body>
 </html>
