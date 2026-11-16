@@ -179,7 +179,9 @@ input[type=range] { accent-color: var(--accent); }
 .seg-tabs button:hover { background: transparent; color: var(--ink); }
 .seg-tabs button.on { background: var(--card); color: var(--accent); box-shadow: var(--shadow); }
 .chips-sel { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
-#addForm .f-ang .chips-sel { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+#addForm .dir-chips { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+#addForm button.add-ang { width: 100%; justify-content: center; gap: 6px; padding: 0 10px; color: var(--on-accent); font-size: 15px; }
+#addForm button.add-ang .ic { width: 20px; height: 20px; }
 .chips-sel button.on, .pill.on { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
 .pills { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
 
@@ -465,6 +467,8 @@ thead th { font: 600 11.5px var(--f-body); text-transform: uppercase; letter-spa
   #addForm .pad-cross .d0 { order: 4; }
   #addForm button.big { min-height: 46px; }
   #addForm .chips-sel button { min-height: 32px; }
+  #addForm .dir-chips { grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 4px; }
+  #addForm .dir-chips button { padding: 2px 0; font-size: 12px; }
   /* свой угол: подпись слева в той же строке, иначе непонятно, что за число */
   #addForm .f-ang-own { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px; }
   #addForm .f-ang-own label { display: block; margin: 0; font-size: 13px; white-space: nowrap; }
