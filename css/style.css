@@ -179,6 +179,7 @@ input[type=range] { accent-color: var(--accent); }
 .seg-tabs button:hover { background: transparent; color: var(--ink); }
 .seg-tabs button.on { background: var(--card); color: var(--accent); box-shadow: var(--shadow); }
 .chips-sel { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+#addForm .f-ang .chips-sel { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .chips-sel button.on, .pill.on { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
 .pills { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
 
@@ -464,7 +465,11 @@ thead th { font: 600 11.5px var(--f-body); text-transform: uppercase; letter-spa
   #addForm .pad-cross .d0 { order: 4; }
   #addForm button.big { min-height: 46px; }
   #addForm .chips-sel button { min-height: 32px; }
-  body[data-tab="part"] { padding-bottom: calc(190px + env(safe-area-inset-bottom, 0px)); }   /* место под нижнюю панель, чтобы она не закрывала подвал */
+  /* свой угол: подпись слева в той же строке, иначе непонятно, что за число */
+  #addForm .f-ang-own { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px; }
+  #addForm .f-ang-own label { display: block; margin: 0; font-size: 13px; white-space: nowrap; }
+  body[data-tab="part"] { padding-bottom: calc(190px + env(safe-area-inset-bottom, 0px)); }
+  body[data-tab="part"]:has(.f-ang-own) { padding-bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }   /* место под нижнюю панель, чтобы она не закрывала подвал */
   body[data-tab="part"] .toast { bottom: calc(200px + env(safe-area-inset-bottom, 0px)); }
   #profileSvg { height: min(46vh, 340px); }
 }

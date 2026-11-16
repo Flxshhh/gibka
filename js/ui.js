@@ -236,6 +236,7 @@
     }
     else if (obj === 'die') { renderDieView(); renderDieSide(); }
     else if (obj === 'machine') renderDieView();
+    else if (obj === 'ui' && key === 'segAngle') refreshAngle();
     else if (obj === 'part' || obj.indexOf('seg:') === 0) {
       if (ST.ui.tab === 'part') renderPartOutputs();
       if (ST.ui.tab === 'sim') renderSimOutputs();
@@ -550,6 +551,17 @@
   const STRAIGHT = [[90, '↑', 'вверх'], [180, '←', 'влево'], [0, '→', 'вправо'], [270, '↓', 'вниз']];
   const DIAG = [['ul', '↖', 'вверх-влево'], ['ur', '↗', 'вверх-вправо'], ['dl', '↙', 'вниз-влево'], ['dr', '↘', 'вниз-вправо']];
   const diagDir = (q, a) => ({ ur: a, ul: 180 - a, dl: 180 + a, dr: 360 - a }[q]);
+  const ANG_CHIPS = [15, 30, 45, 60, 75];
+  // Поворот иконки-стрелки (0 — вверх, по часовой) под выбранный угол к горизонтали
+  const diagRot = (q, a) => ({ ur: 90 - a, ul: a - 90, dl: -90 - a, dr: 90 + a }[q]);
+  // Угол из поля: только 1…89° (0° и 90° — это «Без угла»), один знак после запятой
+  const segAng = () => { const a = +ST.ui.segAngle; return isFinite(a) ? Math.min(89, Math.max(1, Math.round(a * 10) / 10)) : 45; };
+  // После ввода своего угла — подсветить совпадающую кнопку и повернуть стрелки, не перерисовывая поле
+  function refreshAngle() {
+    const a = segAng();
+    $$('#addForm [data-segangle]').forEach(b => b.classList.toggle('on', +b.dataset.segangle === a));
+    $$('#addForm [data-adddiag]').forEach(b => { const g = $('svg', b); if (g) g.style.transform = 'rotate(' + diagRot(b.dataset.adddiag, a) + 'deg)'; });
+  }
 
   // Подпись направления: стрелка и угол к горизонтали
   function dirLabel(dir) {
@@ -587,9 +599,11 @@
     h += stepper('ui', 'segLen', u.segLen, 1, 0.1, 2, 'Длина отрезка, мм', 'f-len');
     if (u.segMode === 'angle') {
       h += '<div class="field f-ang"><label>Угол к горизонтали</label><div class="chips-sel">' +
-        [30, 45, 60].map(a => '<button type="button" data-segangle="' + a + '" class="' + (u.segAngle === a ? 'on' : '') + '">' + a + '°</button>').join('') + '</div></div>';
+        ANG_CHIPS.map(a => '<button type="button" data-segangle="' + a + '" class="' + (u.segAngle === a ? 'on' : '') + '">' + a + '°</button>').join('') + '</div></div>';
+      // любой угол от 1° до 89°: вводится числом или кнопками −/+ (шаг 1°)
+      h += stepper('ui', 'segAngle', u.segAngle, 1, 1, 1, 'Свой угол, ° (1–89)', 'f-ang f-ang-own');
       h += '<div class="field f-dir"><label>Направление — нажмите, чтобы добавить</label><div class="pad4">' +
-        DIAG.map(d => '<button type="button" class="big" data-adddiag="' + d[0] + '" title="' + d[2] + '" aria-label="' + d[2] + '">' + ic('arrow', '', { ul: -45, ur: 45, dl: -135, dr: 135 }[d[0]]) + '</button>').join('') + '</div></div>';
+        DIAG.map(d => '<button type="button" class="big" data-adddiag="' + d[0] + '" title="' + d[2] + '" aria-label="' + d[2] + '">' + ic('arrow', '', diagRot(d[0], segAng())) + '</button>').join('') + '</div></div>';
     } else {
       h += '<div class="field f-dir"><label>Направление — нажмите, чтобы добавить</label><div class="pad-cross">' +
         STRAIGHT.map(d => '<button type="button" class="big d' + d[0] + '" data-adddir="' + d[0] + '" title="' + d[2] + '" aria-label="' + d[2] + '">' + ic('arrow', '', 90 - d[0]) + '</button>').join('') + '</div></div>';
@@ -615,8 +629,8 @@
     renderPartOutputs();
   }
 
-  // Все направления для выбора у отрезка: 4 прямых + диагонали 30/45/60
-  const DIR_OPTS = STRAIGHT.map(d => d[0]).concat([].concat(...DIAG.map(q => [30, 45, 60].map(a => diagDir(q[0], a)))));
+  // Все направления для выбора у отрезка: 4 прямых + диагонали 15/30/45/60/75 (свой угол добавляется к списку сам)
+  const DIR_OPTS = STRAIGHT.map(d => d[0]).concat([].concat(...DIAG.map(q => ANG_CHIPS.map(a => diagDir(q[0], a)))));
 
   // Курсор — точка детали, куда добавляются новые отрезки (0 — начало, n — конец)
   function cursorPos() {
@@ -851,7 +865,11 @@
       if (q('[data-segmode]')) { ST.ui.segMode = q('[data-segmode]').dataset.segmode; saveAll(); renderPartTab(); return; }
       if (q('[data-segangle]')) { ST.ui.segAngle = +q('[data-segangle]').dataset.segangle; saveAll(); renderPartTab(); return; }
       if (q('[data-adddir]')) { addSeg(+q('[data-adddir]').dataset.adddir); return; }
-      if (q('[data-adddiag]')) { addSeg(diagDir(q('[data-adddiag]').dataset.adddiag, ST.ui.segAngle)); return; }
+      if (q('[data-adddiag]')) {
+        const a = segAng();
+        if (a !== +ST.ui.segAngle) { ST.ui.segAngle = a; saveAll(); renderPartTab(); toast('Угол ограничен: ' + fmt(a, 1) + '° (от 1° до 89°)'); }
+        addSeg(+diagDir(q('[data-adddiag]').dataset.adddiag, a).toFixed(3)); return;
+      }
       if (q('[data-del]')) {
         const i = +q('[data-del]').dataset.del;
         p.segs.splice(i, 1); p.order = null;
