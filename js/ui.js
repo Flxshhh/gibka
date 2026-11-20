@@ -872,6 +872,7 @@
       if (!vertex || drag || !e.isPrimary || e.button !== 0) return;
       const matrix = svg.getScreenCTM();
       if (!matrix) return;
+      e.preventDefault();
       const dot = vertex.querySelector('.vtx-dot');
       const x = dot.cx.baseVal.value, y = dot.cy.baseVal.value;
       const preview = document.createElementNS(svg.namespaceURI, 'g');
@@ -889,6 +890,7 @@
       svg.setPointerCapture(e.pointerId);
     });
     svg.addEventListener('pointermove', update);
+    svg.addEventListener('contextmenu', e => { if (drag || e.target.closest('.vtx.on')) e.preventDefault(); });
     svg.addEventListener('pointerup', e => {
       if (drag?.id !== e.pointerId) return;
       const segment = update(e);
