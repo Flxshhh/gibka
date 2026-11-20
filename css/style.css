@@ -396,10 +396,11 @@ thead th { font: 600 11.5px var(--f-body); text-transform: uppercase; letter-spa
 /* ---------- Карта гибки: на экране скрыта, при печати — единственное, что видно ---------- */
 .print-card { display: none; }
 @media print {
-  @page { size: A4; margin: 12mm; }
+  /* Нулевые поля страницы скрывают колонтитулы браузера с URL и датой. */
+  @page { size: A4; margin: 0; }
   body > *:not(.print-card) { display: none !important; }
   body { background: #fff !important; }
-  .print-card { display: block; color: #000; font: 10.5pt/1.4 'Inter', Arial, sans-serif; }
+  .print-card { display: block; padding: 12mm; box-decoration-break: clone; -webkit-box-decoration-break: clone; color: #000; font: 10.5pt/1.4 'Inter', Arial, sans-serif; }
   .pc-head { display: flex; gap: 14px; align-items: center; border-bottom: 2px solid #115398; padding-bottom: 8px; margin-bottom: 10px; }
   .pc-head img { height: 28px; width: auto; }
   .pc-brand { display: grid; justify-items: start; gap: 2px; flex: none; font-size: 8.5pt; }
