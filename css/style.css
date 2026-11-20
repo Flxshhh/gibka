@@ -402,6 +402,8 @@ thead th { font: 600 11.5px var(--f-body); text-transform: uppercase; letter-spa
   .print-card { display: block; color: #000; font: 10.5pt/1.4 'Inter', Arial, sans-serif; }
   .pc-head { display: flex; gap: 14px; align-items: center; border-bottom: 2px solid #115398; padding-bottom: 8px; margin-bottom: 10px; }
   .pc-head img { height: 28px; width: auto; }
+  .pc-brand { display: grid; justify-items: start; gap: 2px; flex: none; font-size: 8.5pt; }
+  .pc-brand a { color: #115398; text-decoration: none; white-space: nowrap; }
   .pc-title { font: 800 17pt 'Manrope', Arial, sans-serif; color: #115398; }
   .pc-sub { color: #444; }
   .pc-cols { display: grid; grid-template-columns: 1.15fr 1fr; gap: 12px; align-items: start; }

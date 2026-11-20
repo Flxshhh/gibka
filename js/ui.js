@@ -1116,18 +1116,18 @@
       (p.segs.length ? 'Гибка: ' + shareUrl() + '\n' : '') + 'Прошу сообщить наличие и стоимость.';
     $('#simPanel').hidden = false;
     $('#simPanel').innerHTML = '<div class="row between"><b>Заявка в wirken</b><button type="button" class="ghost sm" id="panelClose" aria-label="Закрыть">' + ic('x') + '</button></div>' +
-      '<p class="muted small">Текст можно поправить. <b>Telegram</b> откроет чат с номером +7 962 696-59-74 и подставит текст — останется нажать «Отправить». ' +
+      '<p class="muted small">Текст можно поправить. <b>Telegram</b> откроет чат с номером +7 812 612 28 50 и подставит текст — останется нажать «Отправить». ' +
       'В <b>MAX</b> ссылок с готовым текстом нет: кнопка скопирует текст, а в MAX найдите контакт по номеру (Контакты → + → «Найти по номеру») и вставьте его.</p>' +
       '<textarea id="panelText" class="backup" rows="7">' + esc(txt) + '</textarea>' +
       '<div class="row"><a class="link-btn primary" id="panelTg" href="#" target="_blank" rel="noopener">' + ic('send') + 'Отправить в Telegram</a>' +
       '<button type="button" id="panelMax">' + ic('copy') + 'MAX: скопировать текст и номер</button>' +
-      '<button type="button" id="panelCopy">' + ic('copy') + 'Скопировать текст</button><a class="link-btn" href="tel:+79626965974">' + ic('phone') + '+7 962 696-59-74</a></div>';
+      '<button type="button" id="panelCopy">' + ic('copy') + 'Скопировать текст</button><a class="link-btn" href="tel:+78126122850">' + ic('phone') + '+7 812 612 28 50</a></div>';
     // Telegram: t.me/+номер?text=… — черновик сообщения в чате с этим номером. Слишком длинная ссылка обрезается, поэтому
     // если текст с адресом гибки не помещается, адрес из черновика убираем (он остаётся в поле и копируется кнопкой).
     const upd = () => {
       let t = $('#panelText').value;
       if (encodeURIComponent(t).length > 3500) t = t.split('\n').filter(l => l.indexOf('Гибка: ') !== 0).join('\n');
-      $('#panelTg').href = 'https://t.me/+79626965974?text=' + encodeURIComponent(t).slice(0, 3800);
+      $('#panelTg').href = 'https://t.me/+78126122850?text=' + encodeURIComponent(t).slice(0, 3800);
     };
     upd(); $('#panelText').addEventListener('input', upd);
   }
@@ -1165,7 +1165,9 @@
     const pm = profileMarkup(r, false), mat = LG.MATERIALS[p.material].name.split(',')[0];
     const row = (k, v) => '<tr><th>' + k + '</th><td>' + v + '</td></tr>';
     const d = new Date(), date = ('0' + d.getDate()).slice(-2) + '.' + ('0' + (d.getMonth() + 1)).slice(-2) + '.' + d.getFullYear();
-    let h = '<div class="pc-head"><img src="img/logo.png" alt="wirken"><div><div class="pc-title">Карта гибки</div><div class="pc-sub">' + esc(p.name || 'Деталь') + ' · ' + date + '</div></div></div>';
+    let h = '<div class="pc-head"><div class="pc-brand"><img src="img/logo.png" alt="wirken">' +
+      '<a href="https://wirkenrus.com">wirkenrus.com</a><a href="tel:+78126122850">+7 812 612 28 50</a></div>' +
+      '<div><div class="pc-title">Карта гибки</div><div class="pc-sub">' + esc(p.name || 'Деталь') + ' · ' + date + '</div></div></div>';
     h += '<div class="pc-cols"><table class="pc-kv">' +
       row('Лист', mat + ', S = ' + fmt(r.S, 2) + ' мм') +
       row('Заготовка', '<b>' + fmt(r.an.flat, 2) + ' × ' + fmt(p.L, 0) + ' мм</b>') +
@@ -1186,7 +1188,7 @@
     const msgs = r.an.warnings.map(esc);
     if (msgs.length) h += '<div class="pc-h">Замечания</div><ul class="pc-notes">' + msgs.map(m => '<li>' + m + '</li>').join('') + '</ul>';
     h += '<div class="pc-legend">На рисунках: слева оператор, справа задний упор. «Уложен» — лист на матрице, пуансон коснулся; «готово» — гиб выполнен. Жёлтая линия — сторона листа вверх, коричневая планка — упор с размером.</div>';
-    h += '<div class="pc-foot">Упор — расстояние от оси пуансона до заднего упора. Расчёт справочный: первый гиб проверяйте на образце. · wirkenrus.com · +7 962 696-59-74</div>';
+    h += '<div class="pc-foot">Упор — расстояние от оси пуансона до заднего упора. Расчёт справочный: первый гиб проверяйте на образце.</div>';
     $('#printCard').innerHTML = h;
     // печатаем всегда в светлой теме; логотип должен успеть загрузиться
     const root = document.documentElement, prev = root.getAttribute('data-theme');
@@ -1236,7 +1238,7 @@
       if (e.target.id === 'reqBtn') { requestPanel(); return; }
       if (e.target.id === 'panelClose') { $('#simPanel').hidden = true; return; }
       if (e.target.id === 'panelCopy') { copyText($('#panelText').value, 'Скопировано'); return; }
-      if (e.target.id === 'panelMax') { copyText($('#panelText').value, 'Текст скопирован. В MAX найдите по номеру +7 962 696-59-74 и вставьте'); return; }
+      if (e.target.id === 'panelMax') { copyText($('#panelText').value, 'Текст скопирован. В MAX найдите по номеру +7 812 612 28 50 и вставьте'); return; }
       if (e.target.id === 'panelShare') { navigator.share({ title: 'Листогиб: ' + ST.part.name, url: $('#panelText').value }).catch(() => {}); return; }
       const sug = e.target.closest('[data-sugdie]');
       if (sug) {
