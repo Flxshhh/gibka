@@ -263,15 +263,17 @@ button.seg-n:hover { background: var(--accent); color: var(--on-accent); border-
 .ins-mark { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--accent); font-weight: 600; padding: 5px 0 5px 38px; border-top: 2px dashed var(--accent-soft); }
 .cur-info { margin-top: 10px; font-size: 14px; }
 svg .vtx { cursor: pointer; }
-svg .vtx.on { cursor: crosshair; touch-action: none; }
-svg .seg-preview { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 5 3; vector-effect: non-scaling-stroke; pointer-events: none; }
+svg .vtx.on { cursor: crosshair; }
+svg .seg-preview { pointer-events: none; }
+svg .seg-preview line { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 5 3; vector-effect: non-scaling-stroke; }
+svg .seg-preview text { fill: var(--accent); stroke: var(--card); stroke-width: 3; paint-order: stroke; vector-effect: non-scaling-stroke; }
 svg .vtx-hit { fill: transparent; }
 svg .vtx-dot { fill: var(--card); stroke: var(--accent); stroke-width: 2; vector-effect: non-scaling-stroke; }
 svg .vtx.on .vtx-dot, svg .vtx:hover .vtx-dot { fill: var(--accent); }
 
 /* ---------- Окна с чертежами: здесь и только здесь — чертёжная сетка ---------- */
 .view { width: 100%; background-color: var(--card); background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px); background-size: 32px 32px; border-radius: var(--r-c); border: 1px solid var(--line); display: block; }
-#profileSvg { height: 360px; }
+#profileSvg { height: 360px; touch-action: none; }
 .view3d { position: relative; overflow: hidden; touch-action: none; }
 /* Холст 3D лежит поверх своего окна и не участвует в раскладке: его внутренний размер в пикселях
    (в 2–3 раза больше видимого на телефоне) не может растянуть колонку и панель. */

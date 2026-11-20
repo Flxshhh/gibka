@@ -554,14 +554,19 @@
   const ANG_CHIPS = [15, 30, 45, 60, 75];
   // Быстрый выбор направления в режиме «С углом»
   const DIR_CHIPS = [0, 45, 90, 135, 180, 225, 270, 315];
-  // Направление отрезка — полный круг: 0° вправо, 90° вверх, 180° влево, 270° вниз (против часовой стрелки).
+  // Поворот от направления участка у активной точки, против часовой стрелки.
   // Любое число приводится к 0…360, один знак после запятой (−30 → 330, 400 → 40).
   const segDir = () => { const a = +ST.ui.segDir; return isFinite(a) ? +((((Math.round(a * 10) / 10) % 360) + 360) % 360).toFixed(1) : 45; };
+  function segmentBaseDir() {
+    const { segs } = ST.part, cursor = cursorPos();
+    if (!segs.length) return 0;
+    return cursor === 0 ? +segs[0].dir + 180 : +segs[cursor - 1].dir;
+  }
   // После ввода угла — подсветить совпадающую кнопку и подпись направления, не перерисовывая поле
   function refreshDir() {
     const a = segDir();
     $$('#addForm [data-segdirq]').forEach(b => b.classList.toggle('on', +b.dataset.segdirq === a));
-    const t = $('#segDirTxt'); if (t) t.textContent = dirLabel(a);
+    const t = $('#segDirTxt'); if (t) t.textContent = dirLabel(segmentBaseDir() + a);
     // кнопки −/+ за пределами круга: −1 → 359, 361 → 1 (пока печатают в поле — не трогаем)
     const inp = $('.stepper[data-key="segDir"] input');
     if (inp && document.activeElement !== inp && a !== +ST.ui.segDir) { ST.ui.segDir = a; inp.value = fmt(a, 1); saveAll(); }
@@ -604,10 +609,10 @@
     if (u.segMode === 'angle') {
       // угол направления по полному кругу 0…360°: числом, кнопками −/+ или быстрым выбором
       const a = segDir();
-      h += stepper('ui', 'segDir', a, 1, -360, 1, 'Угол, ° (0–360)', 'f-ang f-ang-own');
+      h += stepper('ui', 'segDir', a, 1, -360, 1, 'Поворот от участка у точки, °', 'f-ang f-ang-own');
       h += '<div class="field f-ang"><div class="chips-sel dir-chips">' +
         DIR_CHIPS.map(d => '<button type="button" data-segdirq="' + d + '" class="' + (a === d ? 'on' : '') + '">' + d + '°</button>').join('') + '</div></div>';
-      h += '<div class="field f-dir"><button type="button" class="primary big add-ang" id="segAddAng">' + ic('plus') + 'Добавить: <span id="segDirTxt">' + dirLabel(a) + '</span></button></div>';
+      h += '<div class="field f-dir"><button type="button" class="primary big add-ang" id="segAddAng">' + ic('plus') + 'Добавить: <span id="segDirTxt">' + dirLabel(segmentBaseDir() + a) + '</span></button></div>';
     } else {
       h += '<div class="field f-dir"><label>Направление — нажмите, чтобы добавить</label><div class="pad-cross">' +
         STRAIGHT.map(d => '<button type="button" class="big d' + d[0] + '" data-adddir="' + d[0] + '" title="' + d[2] + '" aria-label="' + d[2] + '">' + ic('arrow', '', 90 - d[0]) + '</button>').join('') + '</div></div>';
@@ -748,6 +753,7 @@
     $('#segUndo').disabled = !HIST.undo.length; $('#segRedo').disabled = !HIST.redo.length;
     const ss = $('#segStr'); if (ss && document.activeElement !== ss) ss.value = partToString();
     renderSegList();
+    if (ST.ui.segMode === 'angle') refreshDir();
     const r = resolve(), an = r.an, p = ST.part;
     renderProfile(r);
     let h = '';
@@ -837,25 +843,28 @@
     let drag = null;
     const clear = () => {
       if (!drag) return;
-      const { id, line } = drag;
+      const { id, preview } = drag;
       drag = null;
-      line.remove();
+      preview.remove();
       if (svg.hasPointerCapture(id)) svg.releasePointerCapture(id);
     };
     const update = e => {
       if (drag?.id !== e.pointerId) return null;
       if (!drag.vertex.isConnected) { clear(); return null; }
       const dx = e.clientX - drag.clientX, dy = e.clientY - drag.clientY;
-      const origin = new DOMPoint(drag.clientX, drag.clientY).matrixTransform(drag.inverse);
       const point = new DOMPoint(e.clientX, e.clientY).matrixTransform(drag.inverse);
-      const x = point.x - origin.x, y = point.y - origin.y;
+      const x = point.x - drag.origin.x, y = point.y - drag.origin.y;
       const len = +Math.hypot(x, y).toFixed(2);
       const visible = Math.hypot(dx, dy) >= 5 && len >= 0.1;
-      drag.line.toggleAttribute('hidden', !visible);
+      drag.preview.toggleAttribute('hidden', !visible);
       if (!visible) return null;
       drag.line.setAttribute('x2', drag.x + x);
       drag.line.setAttribute('y2', drag.y + y);
       const angle = Math.atan2(-y, x) / G.RAD;
+      const offset = 8 * Math.hypot(drag.inverse.a, drag.inverse.b);
+      drag.label.setAttribute('x', drag.x + x / 2);
+      drag.label.setAttribute('y', drag.y + y / 2 - offset);
+      drag.label.textContent = fmt(len, 2) + ' мм · ' + fmt(G.norm180(angle - drag.base), 1) + '°';
       return { dir: +((angle + 360) % 360).toFixed(2) % 360, len };
     };
     svg.addEventListener('pointerdown', e => {
@@ -865,13 +874,18 @@
       if (!matrix) return;
       const dot = vertex.querySelector('.vtx-dot');
       const x = dot.cx.baseVal.value, y = dot.cy.baseVal.value;
-      const line = document.createElementNS(svg.namespaceURI, 'line');
-      line.setAttribute('class', 'seg-preview');
+      const preview = document.createElementNS(svg.namespaceURI, 'g');
+      preview.setAttribute('class', 'seg-preview');
+      preview.setAttribute('hidden', '');
+      preview.innerHTML = '<line/><text text-anchor="middle"/>';
+      const [line, label] = preview.children;
       line.setAttribute('x1', x);
       line.setAttribute('y1', y);
-      line.setAttribute('hidden', '');
-      svg.append(line);
-      drag = { id: e.pointerId, vertex, line, inverse: matrix.inverse(), x, y, clientX: e.clientX, clientY: e.clientY };
+      const inverse = matrix.inverse();
+      const origin = new DOMPoint(e.clientX, e.clientY).matrixTransform(inverse);
+      label.setAttribute('font-size', 13 * Math.hypot(inverse.a, inverse.b));
+      svg.append(preview);
+      drag = { id: e.pointerId, vertex, preview, line, label, inverse, origin, base: segmentBaseDir(), x, y, clientX: e.clientX, clientY: e.clientY };
       svg.setPointerCapture(e.pointerId);
     });
     svg.addEventListener('pointermove', update);
@@ -927,7 +941,7 @@
       if (t.closest('#segAddAng')) {
         const a = segDir();
         if (a !== +ST.ui.segDir) { ST.ui.segDir = a; saveAll(); renderPartTab(); }
-        addSeg(a); return;
+        addSeg((segmentBaseDir() + a + 360) % 360); return;
       }
       if (q('[data-del]')) {
         const i = +q('[data-del]').dataset.del;
