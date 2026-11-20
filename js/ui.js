@@ -673,8 +673,8 @@
       (c < p.segs.length ? ' <button type="button" class="link" data-cur="end">в конец</button>' : '');
   }
 
-  function addSeg(dir) {
-    const p = ST.part, len = +ST.ui.segLen;
+  function addSeg(dir, len = +ST.ui.segLen) {
+    const p = ST.part;
     if (!(len > 0)) { toast('Задайте длину больше 0'); return; }
     const c = cursorPos();
     // От начала детали отрезок рисуется наружу по стрелке, а в профиле он идёт к старому началу — разворачиваем
@@ -825,7 +825,7 @@
     const cur = cursorPos();
     if (withVtx) sharp.forEach((pt, i) => {
       h += '<g class="vtx' + (i === cur ? ' on' : '') + '" data-vtx="' + i + '"><title>' +
-        (i === 0 ? 'Достраивать от начала' : i === sharp.length - 1 ? 'Достраивать от конца' : 'Достраивать от изгиба Г' + i) + '</title>' +
+        (i === cur ? 'Потяните, чтобы добавить отрезок' : i === 0 ? 'Достраивать от начала' : i === sharp.length - 1 ? 'Достраивать от конца' : 'Достраивать от изгиба Г' + i) + '</title>' +
         SV.circle(pt, fs * 0.75, 'vtx-hit') + SV.circle(pt, fs * (i === cur ? 0.42 : 0.28), 'vtx-dot') + '</g>';
     });
     const bb = G.bounds(shape.poly, G.bounds(sharp));
@@ -833,8 +833,63 @@
     return { viewBox: SV.viewBox(bb, 0), html: h };
   }
 
+  function bindProfileDrag(svg) {
+    let drag = null;
+    const clear = () => {
+      if (!drag) return;
+      const { id, line } = drag;
+      drag = null;
+      line.remove();
+      if (svg.hasPointerCapture(id)) svg.releasePointerCapture(id);
+    };
+    const update = e => {
+      if (drag?.id !== e.pointerId) return null;
+      if (!drag.vertex.isConnected) { clear(); return null; }
+      const dx = e.clientX - drag.clientX, dy = e.clientY - drag.clientY;
+      const origin = new DOMPoint(drag.clientX, drag.clientY).matrixTransform(drag.inverse);
+      const point = new DOMPoint(e.clientX, e.clientY).matrixTransform(drag.inverse);
+      const x = point.x - origin.x, y = point.y - origin.y;
+      const len = +Math.hypot(x, y).toFixed(2);
+      const visible = Math.hypot(dx, dy) >= 5 && len >= 0.1;
+      drag.line.toggleAttribute('hidden', !visible);
+      if (!visible) return null;
+      drag.line.setAttribute('x2', drag.x + x);
+      drag.line.setAttribute('y2', drag.y + y);
+      const angle = Math.atan2(-y, x) / G.RAD;
+      return { dir: +((angle + 360) % 360).toFixed(2) % 360, len };
+    };
+    svg.addEventListener('pointerdown', e => {
+      const vertex = e.target.closest('.vtx.on');
+      if (!vertex || drag || !e.isPrimary || e.button !== 0) return;
+      const matrix = svg.getScreenCTM();
+      if (!matrix) return;
+      const dot = vertex.querySelector('.vtx-dot');
+      const x = dot.cx.baseVal.value, y = dot.cy.baseVal.value;
+      const line = document.createElementNS(svg.namespaceURI, 'line');
+      line.setAttribute('class', 'seg-preview');
+      line.setAttribute('x1', x);
+      line.setAttribute('y1', y);
+      line.setAttribute('hidden', '');
+      svg.append(line);
+      drag = { id: e.pointerId, vertex, line, inverse: matrix.inverse(), x, y, clientX: e.clientX, clientY: e.clientY };
+      svg.setPointerCapture(e.pointerId);
+    });
+    svg.addEventListener('pointermove', update);
+    svg.addEventListener('pointerup', e => {
+      if (drag?.id !== e.pointerId) return;
+      const segment = update(e);
+      clear();
+      if (segment) addSeg(segment.dir, segment.len);
+    });
+    for (const event of ['pointercancel', 'lostpointercapture']) {
+      svg.addEventListener(event, e => { if (drag?.id === e.pointerId) clear(); });
+    }
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') clear(); });
+  }
+
   function bindPartTab() {
     const root = $('#tab-part');
+    bindProfileDrag($('#profileSvg'));
     $('#partDxf').addEventListener('change', e => readDxf(e.target, (text, name) => {
       const r = LG.DXF.part(text), p = ST.part;
       if (r.error) { toast(r.error, 8000); return; }

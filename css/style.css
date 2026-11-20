@@ -263,6 +263,8 @@ button.seg-n:hover { background: var(--accent); color: var(--on-accent); border-
 .ins-mark { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--accent); font-weight: 600; padding: 5px 0 5px 38px; border-top: 2px dashed var(--accent-soft); }
 .cur-info { margin-top: 10px; font-size: 14px; }
 svg .vtx { cursor: pointer; }
+svg .vtx.on { cursor: crosshair; touch-action: none; }
+svg .seg-preview { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 5 3; vector-effect: non-scaling-stroke; pointer-events: none; }
 svg .vtx-hit { fill: transparent; }
 svg .vtx-dot { fill: var(--card); stroke: var(--accent); stroke-width: 2; vector-effect: non-scaling-stroke; }
 svg .vtx.on .vtx-dot, svg .vtx:hover .vtx-dot { fill: var(--accent); }
