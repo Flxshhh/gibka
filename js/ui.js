@@ -1539,7 +1539,7 @@
       if (!sim3d) { $('#sim3d').innerHTML = ''; sim3d = new LG.View3D($('#sim3d')); }
       if (!sim3d.ok) { sim3d = null; set3d(false); toast('3D недоступно: не загрузилась библиотека (нужен интернет)', 4000); return; }   // возвращаем плоский вид
       sim3d.key = null;
-      sim3d.theta = -Math.PI / 2;
+      sim3d.theta = 0;
       sim3d.phi = Math.PI / 2;
       drawFrame();
       if (then) then();
