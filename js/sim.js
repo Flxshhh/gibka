@@ -51,21 +51,22 @@
 
   // Сечение из «Держатель пуансона.doc». Начало по посадочному плечу;
   // x = 7..20 мм — гнездо хвостовика. Недоразмеренные скосы сняты с рисунка.
-  function punchMountSection(H, mirror) {
+  function punchMountSection(punch, mirror) {
     const profiles = [
       [[7, 0], [-7, 0], [-7, 28], [-20, 28], [-20, 100],
         [7, 100], [7, 130], [20, 130], [20, 116], [16.5, 116],
         [16.5, 104], [20, 104], [20, 32], [7, 32]],
       [[20, 85], [36, 85], [36, 22], [27, 7],
-        [23, 7], [16.5, 10.5], [16.5, 14], [20, 14]],
-      [[20, 109], [30.5, 109], [36.5, 125], [36.5, 161],
-        [30.5, 167], [20, 167], [20, 152], [26.5, 152], [26.5, 133], [20, 133]],
+        [22.5, 7], [16.5, 12], [16.5, 14], [20, 14]],
+      [[16.5, 109], [30.5, 109], [36.5, 125], [36.5, 161],
+        [30.5, 167], [20, 167], [20, 152], [26.5, 152], [26.5, 133], [20, 133], [20, 112], [16.5, 112]],
       [[-20, 100], [-20, 199], [24.5, 212], [24.5, 185],
         [20, 177], [20, 132], [7, 132], [7, 100]],
       [[21.5, 137], [26.5, 137], [26.5, 133], [36.5, 133],
         [36.5, 151], [26.5, 151], [26.5, 147], [21.5, 147]]
     ];
-    const parts = profiles.map(poly => poly.map(([x, y]) => ({ x, y: H + y })));
+    const offset = punch.tangCx - (G.PUNCH_FIX.TL + G.PUNCH_FIX.TW / 2);
+    const parts = profiles.map(poly => poly.map(([x, y]) => ({ x: x + offset, y: punch.H + y })));
     return mirror ? parts.map(G.mirrorX) : parts;
   }
 
@@ -76,22 +77,52 @@
     if (!(die.others?.length || /^(Двухручьевые|Многоручьевые)$/.test(die.group || ''))) return null;
     const outline = die.outline || [];
     const low = outline.length ? Math.min(...outline.map(p => p[1])) : 0;
-    const recess = outline.map((a, i) => {
-      const b = outline[(i + 1) % outline.length];
-      return { x: (a[0] + b[0]) / 2, y: (a[1] + b[1]) / 2 - low,
-        width: Math.abs(a[0] - b[0]), rise: Math.abs(a[1] - b[1]) };
-    }).find(e => e.rise < 0.15 && e.y >= keyHeight && e.y < 10 && e.width >= keyWidth - 0.05);
-    const bottom = outline.filter(p => p[1] <= low + 0.5).map(p => p[0]);
-    const center = bottom.length ? (Math.min(...bottom) + Math.max(...bottom)) / 2 : 0;
-    const x = (recess?.x ?? center) - 17;
+    // Сечение чуть выше подошвы даёт опорные площадки и промежутки между ними.
+    const scanY = low + 0.1;
+    const cuts = [];
+    const edges = outline.map((a, i) => [a, outline[(i + 1) % outline.length]]);
+    for (const [a, b] of edges) {
+      if ((a[1] > scanY) !== (b[1] > scanY)) {
+        cuts.push(a[0] + (b[0] - a[0]) * (scanY - a[1]) / (b[1] - a[1]));
+      }
+    }
+    cuts.sort((a, b) => a - b);
+    const middle = cuts.length ? (cuts[0] + cuts[cuts.length - 1]) / 2 : 0;
+    const centers = [];
+    for (let i = 1; i + 1 < cuts.length; i += 2) {
+      if (cuts[i + 1] - cuts[i] >= keyWidth - 0.1) centers.push((cuts[i] + cuts[i + 1]) / 2);
+    }
+    centers.sort((a, b) => Math.abs(a - middle) - Math.abs(b - middle));
+    centers.push(middle);
     const profile = [
       { x: 0, y: 0 }, { x: adapterWidth, y: 0 }, { x: adapterWidth, y: adapterBase },
-      ...G.arc({ x: 24.5, y: 20 }, 1, 0, Math.PI / 2, 10),
+      ...G.arc({ x: 24.5, y: 20 }, 1, 0, -3 * Math.PI / 2, 10),
       { x: 24.5, y: adapterBase + keyHeight }, { x: 9.5, y: adapterBase + keyHeight },
-      ...G.arc({ x: 9.5, y: 20 }, 1, Math.PI / 2, Math.PI, 10),
+      ...G.arc({ x: 9.5, y: 20 }, 1, Math.PI / 2, -Math.PI, 10),
       { x: 0, y: adapterBase }
     ];
-    return { poly: G.translate(profile, x, 0), base: recess ? adapterBase : adapterBase + keyHeight, seated: !!recess };
+    // На каждом общем интервале по X обе границы линейны. Максимум
+    // разности высот на его концах задаёт первый контакт без наложения.
+    let best;
+    for (const center of centers) {
+      const poly = G.translate(profile, center - 17, 0);
+      let base = edges.length ? adapterBase - low : adapterBase + keyHeight;
+      for (let i = 0; i < poly.length; i++) {
+        const p = poly[i], q = poly[(i + 1) % poly.length];
+        for (const [a, b] of edges) {
+          const left = Math.max(Math.min(p.x, q.x), Math.min(a[0], b[0]));
+          const right = Math.min(Math.max(p.x, q.x), Math.max(a[0], b[0]));
+          if (right - left < 1e-7) continue;
+          for (const x of [left, right]) {
+            const support = p.y + (q.y - p.y) * (x - p.x) / (q.x - p.x);
+            const bottom = a[1] + (b[1] - a[1]) * (x - a[0]) / (b[0] - a[0]);
+            base = Math.max(base, support - bottom);
+          }
+        }
+      }
+      if (!best || base < best.base - 1e-7) best = { poly, base, seated: base + low <= adapterBase + 0.05 };
+    }
+    return best;
   }
 
   function dieBase(die, machine) {
@@ -138,7 +169,7 @@
     this.tangLocal = ctx.punchMirror ? G.mirrorX(ps.tang) : ps.tang;
     this.tangCx = ctx.punchMirror ? -ps.tangCx : ps.tangCx;   // зажим держит хвостовик
     this.holderLocal = holderShape(ps, m, ctx.punchMirror, m.holderH);
-    this.holderSection = punchMountSection(ps.H, ctx.punchMirror);
+    this.holderSection = punchMountSection(ps, ctx.punchMirror);
     this.padSection = adapter?.poly ?? dieMountSection(this.die.poly, m);
     this.holderView = m.holderH > 70 ? holderShape(ps, m, ctx.punchMirror, 70) : this.holderLocal;
     // Положение носика при полностью открытом прессе
@@ -181,13 +212,11 @@
 
   // Инструмент в положении носика tipY
   Sim.prototype.tools = function (tipY) {
-    const m = this.ctx.machine, H = this.punchInfo.H;
-    const hy = tipY + H;
+    const [body, jaw, upper, beam, screw] = this.mountSection(tipY);
     return {
       punch: G.translate(this.punchLocal, 0, tipY),
       tang: G.translate(this.tangLocal, 0, tipY),
-      holder: this.holderLocal.map(poly => G.translate(poly, 0, tipY)),
-      beam: G.rect(this.tangCx - 45, hy + m.holderH, this.tangCx + 45, hy + m.holderH + 600)
+      holder: [body, jaw, upper, screw], beam
     };
   };
 
@@ -209,7 +238,7 @@
     add('зажим пуансона', t.holder.flatMap(poly => G.polyHits(pl.poly, poly)));
     add('балка', G.polyHits(pl.poly, t.beam));
     add('матрица', G.polyHits(pl.poly, this.die.poly, nearShoulder));
-    add('подложка', G.polyHits(pl.poly, this.pad));
+    add('подложка', G.polyHits(pl.poly, this.padSection));
     add('стол', G.polyHits(pl.poly, this.table));
     return res;
   };

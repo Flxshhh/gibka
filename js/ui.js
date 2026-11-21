@@ -1218,7 +1218,7 @@
     const w = b.x1 - b.x0, hgt = b.y1 - b.y0, m = Math.max(w, hgt) * 0.04 + 2, fs = Math.max(w, hgt) / 16;
     const vb = SV.viewBox({ x0: b.x0 - m, x1: b.x1 + m, y0: b.y0 - m, y1: b.y1 + m }, 0);
     const pic = (pl, t, label, gauge) => {
-      let h = SV.path(sim.pad, 'ps-mach') + SV.path(sim.die.poly, 'ps-tool') + sim.mountSection(pl.tipY).map((p, i) => SV.path(p, i === 0 || i === 3 ? 'ps-mach' : 'ps-tool')).join('') + SV.path(t.tang, 'ps-mach') + SV.path(t.punch, 'ps-tool') +
+      let h = SV.path(sim.padSection, 'ps-mach') + SV.path(sim.die.poly, 'ps-tool') + sim.mountSection(pl.tipY).map((p, i) => SV.path(p, i === 0 || i === 3 ? 'ps-mach' : 'ps-tool')).join('') + SV.path(t.tang, 'ps-mach') + SV.path(t.punch, 'ps-tool') +
         SV.path(pl.poly, 'ps-sheet') + SV.path(s.face === 'A' ? pl.A : pl.B, 'ps-face', false);
       if (gauge && s.stop != null) {
         h += SV.path(G.rect(s.stop, sim.dieTop - fs * 0.25, s.stop + fs * 0.4, sim.dieTop + S + fs * 0.9), 'ps-gauge');
@@ -1959,7 +1959,7 @@
     const b = R.an.bends[s.bend];
     hud.innerHTML = '<div class="hud-t">Шаг ' + (k + 1) + ' из ' + n + ' · Гиб Г' + (s.bend + 1) + ' на ' + fmt(b.incl, 0) + '° · <span class="muted">' + phase + '</span></div>' +
       '<div>' + s.notes.map(esc).concat(['к упору ' + s.backEdge]).concat(s.stop != null ? ['упор ' + fmt(s.stop, 1) + ' мм'] : []).join(' · ') + '</div>' +
-      (sim.dieAdapterUnseated ? '<div class="bad">WPM 60: подходящий нижний паз не найден. Посадка показана условно.</div>' : '') +
+      (sim.dieAdapterUnseated ? '<div class="bad">Матрица касается выступа WPM 60. Полная посадка на основание не подтверждена.</div>' : '') +
       (hits.length ? '<div class="bad">Столкновение: ' + uniq(hitTools).join(', ') + '</div>' : '');
     if (slider && document.activeElement !== slider) slider.value = T ? Math.round(PLAYER.t / T * 1000) : 0;
     if (PLAYER.recDraw) PLAYER.recDraw({ sim, s, sheet, face, t, tip, hits, hitTools, v, fs, showStop: slide === 0 && u < 0.8,
