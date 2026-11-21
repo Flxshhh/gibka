@@ -18,6 +18,7 @@
     this.group = new THREE.Group();
     this.scene.add(this.group);
     this.theta = -0.45; this.phi = 1.1; this.radius = 1000; this.target = new THREE.Vector3();
+    this.cameraInput = 0;
     this.bindControls();
     if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => this.resize()).observe(el);
   }
@@ -31,6 +32,8 @@
     c.addEventListener('pointermove', e => {
       const p = pts.get(e.pointerId);
       if (!p) return;
+      if (e.clientX === p.x && e.clientY === p.y) return;
+      this.cameraInput++;
       if (pts.size === 1) {
         this.theta -= (e.clientX - p.x) * 0.008;
         this.phi = Math.max(0.1, Math.min(Math.PI - 0.1, this.phi - (e.clientY - p.y) * 0.008));
@@ -45,7 +48,7 @@
     });
     const up = e => { pts.delete(e.pointerId); pinch = 0; };
     c.addEventListener('pointerup', up); c.addEventListener('pointercancel', up);
-    c.addEventListener('wheel', e => { e.preventDefault(); this.radius = Math.max(50, this.radius * (e.deltaY > 0 ? 1.1 : 0.9)); this.render(); }, { passive: false });
+    c.addEventListener('wheel', e => { e.preventDefault(); this.cameraInput++; this.radius = Math.max(50, this.radius * (e.deltaY > 0 ? 1.1 : 0.9)); this.render(); }, { passive: false });
   };
 
   // poly — контур в мм (x, y), length — длина пуансона

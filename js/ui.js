@@ -1665,18 +1665,18 @@
     const start = () => {
       if (!REC.canvas) REC.canvas = document.createElement('canvas');
       const mime = ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm'].find(m => MediaRecorder.isTypeSupported(m));
-      const is3d = mode === '3d', unbg = () => { if (is3d && sim3d && sim3d.ok) { sim3d.scene.background = null; sim3d.render(); } };
+      const is3d = mode === '3d', clearFlyby = () => { REC.flyby = null; };
       REC.mode = mode;
       PLAYER.pause(); PLAYER.t = 0;
-      if (is3d) sim3d.scene.background = new THREE.Color(0xffffff);   // у холста прозрачный фон — в видео он был бы чёрным
+      REC.flyby = is3d ? { theta: sim3d.theta, radius: sim3d.radius, input: sim3d.cameraInput } : null;
       PLAYER.recDraw = is3d ? recFrame3d : recFrame2d; drawFrame();
       let rec;
       try { rec = new MediaRecorder(REC.canvas.captureStream(30), mime ? { mimeType: mime, videoBitsPerSecond: 5e6 } : undefined); }
-      catch (err) { PLAYER.recDraw = null; unbg(); recCancel(); toast('Запись видео не запустилась: ' + err.message, 5000); return; }
+      catch (err) { PLAYER.recDraw = null; clearFlyby(); recCancel(); toast('Запись видео не запустилась: ' + err.message, 5000); return; }
       const chunks = [], btn = $('#recBtn');
       rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
       rec.onstop = () => {
-        PLAYER.recDraw = null; unbg();
+        PLAYER.recDraw = null; clearFlyby();
         btn.innerHTML = ic('rec') + 'Видео'; btn.classList.remove('rec');
         if (!chunks.length) { toast('Видео не записалось', 4000); return; }
         const type = rec.mimeType || mime || 'video/webm', a = document.createElement('a');
@@ -1733,7 +1733,9 @@
     mesh.position.copy(target.sub(anchor(to).applyQuaternion(mesh.quaternion)));
   }
 
-  function draw3d(sim, s, pl, sheet, tip, hits, k, transferProgress) {
+  const GAUGE_RETREAT = 35;
+
+  function draw3d(sim, s, pl, sheet, tip, hits, k, transferProgress, gaugeOffset) {
     const v = sim3d;
     if (!v || !v.ok) return false;
     const L = Math.max(50, Math.min(4000, +ST.part.L || 1000)), Lt = L * 1.08, m = ST.machine, H = sim.punchInfo.H;
@@ -1790,6 +1792,14 @@
         part.position.z = side * L * 0.22;
       }
     }
+    for (const side of [-1, 1]) v.parts['gauge' + side].position.x = gaugeOffset;
+    const flyby = REC.flyby;
+    if (flyby && flyby.input === v.cameraInput) {
+      const amount = ease(PLAYER.t / PLAYER.total());
+      const towardFront = Math.atan2(Math.sin(-Math.PI / 2 - flyby.theta), Math.cos(-Math.PI / 2 - flyby.theta));
+      v.theta = flyby.theta + Math.max(-0.55, Math.min(0.55, towardFront)) * amount;
+      v.radius = flyby.radius * (1 - 0.12 * amount);
+    }
     v.render();
     return true;
   }
@@ -1813,9 +1823,11 @@
     const contact0 = sim.place(sim.fracs(done, s.bend, 0), s.bend, s.mirror).tipY;
     const contact1 = sim.place(sim.fracs(done, s.bend, 1), s.bend, s.mirror).tipY;
     const open = Math.max(PLAYER.openY || sim.tipOpen, contact0 + 5);
+    const bendStart = PLAYER.d3 ? 0.45 : 0.35;
     if (u < 0.15) { phase = 'Укладка листа'; slide = 1 - ease(u / 0.15); tip = open; }
     else if (u < 0.35) { phase = 'Подвод пуансона'; tip = open + (contact0 - open) * ease((u - 0.15) / 0.2); }
-    else if (u < 0.8) { phase = 'Гибка'; f = ease((u - 0.35) / 0.45); tip = null; }
+    else if (u < bendStart) { phase = 'Отвод задних упоров'; tip = contact0; }
+    else if (u < 0.8) { phase = 'Гибка'; f = ease((u - bendStart) / (0.8 - bendStart)); tip = null; }
     else { phase = 'Возврат'; f = 1; tip = contact1 + (open - contact1) * ease((u - 0.8) / 0.2); }
     const pl = sim.place(sim.fracs(done, s.bend, f), s.bend, s.mirror);
     if (tip == null) tip = pl.tipY;
@@ -1836,7 +1848,12 @@
     const fs = (v.y1 - v.y0) / 32;
 
     const transferProgress = k > 0 && u < 0.15 ? u / 0.15 : null;
-    if (!(PLAYER.d3 && draw3d(sim, s, pl, sheet, tip, hits, k, transferProgress))) {
+    let gaugeOffset = GAUGE_RETREAT * ease((u - 0.35) / 0.1);
+    if (transferProgress != null && s.stop != null) {
+      const previousStop = plan.steps[k - 1].stop ?? s.stop;
+      gaugeOffset = (previousStop + GAUGE_RETREAT - s.stop) * (1 - ease((transferProgress - 0.3) / 0.7));
+    }
+    if (!(PLAYER.d3 && draw3d(sim, s, pl, sheet, tip, hits, k, transferProgress, gaugeOffset))) {
       let h = SV.path(sim.table, 'm-table' + cls('стол')) + SV.path(sim.pad, 'm-pad' + cls('подложка')) +
         SV.path(sim.die.poly, 'm-die' + cls('матрица')) + SV.line({ x: 0, y: v.y0 }, { x: 0, y: v.y1 }, 'axis');
       if (s.stop != null && slide === 0 && u < 0.8) {
