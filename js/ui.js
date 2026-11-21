@@ -1218,7 +1218,7 @@
     const w = b.x1 - b.x0, hgt = b.y1 - b.y0, m = Math.max(w, hgt) * 0.04 + 2, fs = Math.max(w, hgt) / 16;
     const vb = SV.viewBox({ x0: b.x0 - m, x1: b.x1 + m, y0: b.y0 - m, y1: b.y1 + m }, 0);
     const pic = (pl, t, label, gauge) => {
-      let h = SV.path(sim.padSection, 'ps-mach') + SV.path(sim.die.poly, 'ps-tool') + sim.mountSection(pl.tipY).map((p, i) => SV.path(p, i === 5 ? 'ps-mach ps-insert' : 'ps-mach')).join('') + SV.path(t.tang, 'ps-tool') + SV.path(t.punch, 'ps-tool') +
+      let h = SV.path(sim.padSection, 'ps-mach') + SV.path(sim.adapter, 'ps-mach ps-insert') + SV.path(sim.die.poly, 'ps-tool') + sim.mountSection(pl.tipY).map((p, i) => SV.path(p, i === 5 ? 'ps-mach ps-insert' : 'ps-mach')).join('') + SV.path(t.tang, 'ps-tool') + SV.path(t.punch, 'ps-tool') +
         SV.path(pl.poly, 'ps-sheet') + SV.path(s.face === 'A' ? pl.A : pl.B, 'ps-face', false);
       if (gauge && s.stop != null) {
         h += SV.path(G.rect(s.stop, sim.dieTop - fs * 0.25, s.stop + fs * 0.4, sim.dieTop + S + fs * 0.9), 'ps-gauge');
@@ -1614,6 +1614,7 @@
     const MF = '#c4cad2', ME = '#aeb4bb', TF = '#979da3', TE = '#7b8288', RED = '#ff3b30';
     poly(fr.sim.table, MF, hit('стол') ? RED : ME, hit('стол') ? 3 : 1.5);
     poly(fr.sim.padSection, MF, hit('подложка') ? RED : ME, hit('подложка') ? 3 : 1.5);
+    poly(fr.sim.adapter, '#adb6c1', hit('переходник WPM 60') ? RED : ME, hit('переходник WPM 60') ? 3 : 1.5);
     poly(fr.sim.die.poly, TF, hit('матрица') ? RED : TE, hit('матрица') ? 3 : 1.5);
     g.strokeStyle = 'rgba(217,45,45,.45)'; g.lineWidth = 1; g.setLineDash([10, 5, 2, 5]); g.beginPath(); g.moveTo(X(0), ay); g.lineTo(X(0), ay + ah); g.stroke(); g.setLineDash([]);
     if (fr.showStop && fr.s.stop != null) {
@@ -1820,7 +1821,8 @@
       const TOOL = { color: 0xf0f1f2, edges: true, edgeColor: 0x91979d, metal: 0.52, roughness: 0.27 };
       const FRAME = { color: 0x62717b, edges: true, edgeColor: 0x47545e, metal: 0.58, roughness: 0.37 };
       v.setPart('table', G.rect(-70, -40, 70, 0), Lt * 1.12, { color: 0xa1a7a8, metal: 0 });
-      v.setPart('pad', sim.pad, Lt, TOOL);
+      v.setPart('pad', sim.padSection, Lt, TOOL);
+      v.setPart('adapter', sim.adapter, Lt, FRAME);
       v.setPart('die', sim.die.poly, Lt, TOOL);
       v.setPart('punch', sim.punchLocal, Lt, TOOL);
       v.setPart('tang', sim.tangLocal, Lt, TOOL);
@@ -1939,6 +1941,7 @@
     }
     if (!(PLAYER.d3 && draw3d(sim, s, pl, sheet, tip, hits, k, transferProgress, gaugeOffset))) {
       let h = SV.path(sim.table, 'm-table' + cls('стол')) + SV.path(sim.padSection, 'm-pad' + cls('подложка')) +
+        SV.path(sim.adapter, 'm-pad m-insert' + cls('переходник WPM 60')) +
         SV.path(sim.die.poly, 'm-die' + cls('матрица')) + SV.line({ x: 0, y: v.y0 }, { x: 0, y: v.y1 }, 'axis');
       if (s.stop != null && slide === 0 && u < 0.8) {
         const y = sim.dieTop;

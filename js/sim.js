@@ -128,7 +128,7 @@
   }
 
   function dieBase(die, machine) {
-    return dieAdapter(die)?.base ?? machine.padH;
+    return machine.padH + (dieAdapter(die)?.base ?? 0);
   }
 
   // Полка адаптера под нижней гранью матрицы и боковые бортики.
@@ -158,11 +158,11 @@
     this.ctx = ctx;
     const m = ctx.machine;
     const adapter = dieAdapter(ctx.die);
-    this.dieBase = adapter?.base ?? m.padH;
+    this.dieBase = m.padH + (adapter?.base ?? 0);
     this.dieAdapterUnseated = adapter?.seated === false;
     this.die = G.dieShape(ctx.die, this.dieBase);
     this.dieTop = this.die.top;
-    this.pad = adapter?.poly ?? G.rect(-m.padW / 2, 0, m.padW / 2, m.padH);
+    this.adapter = adapter ? G.translate(adapter.poly, 0, m.padH) : [];
     this.table = [{ x: -70, y: 0 }, { x: 70, y: 0 }, { x: 70, y: -35 }, { x: 30, y: -35 }, { x: 30, y: -400 },
       { x: -30, y: -400 }, { x: -30, y: -35 }, { x: -70, y: -35 }];
     const ps = G.punchShape(ctx.punch);
@@ -172,7 +172,7 @@
     this.tangCx = ctx.punchMirror ? -ps.tangCx : ps.tangCx;   // зажим держит хвостовик
     this.holderLocal = holderShape(ps, m, ctx.punchMirror, m.holderH);
     this.holderSection = punchMountSection(ps, ctx.punchMirror);
-    this.padSection = adapter?.poly ?? dieMountSection(this.die.poly, m);
+    this.padSection = dieMountSection(adapter ? this.adapter : this.die.poly, m);
     this.holderView = m.holderH > 70 ? holderShape(ps, m, ctx.punchMirror, 70) : this.holderLocal;
     // Положение носика при полностью открытом прессе
     this.tipOpen = m.D - m.holderH - ps.H;
@@ -240,6 +240,7 @@
     add('зажим пуансона', t.holder.flatMap(poly => G.polyHits(pl.poly, poly)));
     add('балка', G.polyHits(pl.poly, t.beam));
     add('матрица', G.polyHits(pl.poly, this.die.poly, nearShoulder));
+    if (this.adapter.length) add('переходник WPM 60', G.polyHits(pl.poly, this.adapter));
     add('подложка', G.polyHits(pl.poly, this.padSection));
     add('стол', G.polyHits(pl.poly, this.table));
     return res;
