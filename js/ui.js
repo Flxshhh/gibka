@@ -1256,11 +1256,7 @@
     h += '<div class="pc-legend">На рисунках: слева оператор, справа задний упор. «Уложен» — лист на матрице, пуансон коснулся; «готово» — гиб выполнен. Жёлтая линия — сторона листа вверх, коричневая планка — упор с размером.</div>';
     h += '<div class="pc-foot">Упор — расстояние от оси пуансона до заднего упора. Расчёт справочный: первый гиб проверяйте на образце.</div>';
     $('#printCard').innerHTML = h;
-    // печатаем всегда в светлой теме; логотип должен успеть загрузиться
-    const root = document.documentElement, prev = root.getAttribute('data-theme');
-    root.setAttribute('data-theme', 'light');
-    const done = () => { if (prev) root.setAttribute('data-theme', prev); else root.removeAttribute('data-theme'); window.removeEventListener('afterprint', done); };
-    window.addEventListener('afterprint', done);
+    // Дожидаемся загрузки логотипа перед печатью.
     const img = $('#printCard img'), go = () => setTimeout(() => window.print(), 50);
     if (img && !img.complete) { img.onload = go; img.onerror = go; } else go();
   }
