@@ -34,19 +34,41 @@
     const x0 = Math.min(ps.tangCx - machine.holderW / 2, bounds.x0 - 1);
     const x1 = Math.max(ps.tangCx + machine.holderW / 2, bounds.x1 + 1);
     if (section && top > peak.y) {
-      const root = right[0].x;
-      const jawW = Math.max(4, (x1 - x0) * 0.22);
-      const outer = bounds.x1 + jawW;
-      const jawTop = Math.min(top, peak.y + jawW);
-      const split = Math.max(jawTop, top - height * 0.35);
-      const body = [{ x: x0, y: base }, ...left, { x: peak.x, y: jawTop },
-        { x: bounds.x1, y: jawTop }, { x: bounds.x1, y: top }, { x: x0, y: split }];
-      const jaw = [...right, { x: peak.x, y: jawTop }, { x: outer, y: jawTop },
-        { x: outer, y: base + (peak.y - base) * 0.55 }, { x: root + jawW * 0.45, y: base }];
-      const upper = [{ x: bounds.x1, y: split }, { x: outer - jawW * 0.4, y: split },
-        { x: outer, y: split + (top - split) * 0.35 }, { x: outer, y: top },
-        { x: bounds.x1, y: top }];
-      return [body, jaw, upper].map(poly => mirror ? G.mirrorX(poly) : poly);
+      const span = Math.max(bounds.x1 - bounds.x0, 6);
+      const x = px => bounds.x0 + (px - 573) * span / 122;
+      const y = py => py >= 930
+        ? base + (1063 - py) * (peak.y - base) / 133
+        : peak.y + (930 - py) * (top - peak.y) / 317;
+      const point = ([px, py]) => ({ x: x(px), y: y(py) });
+      const path = points => points.map(point);
+      const padX = Math.min(x(515), x0);
+      const body = [
+        ...left, { x: x(636), y: y(837) },
+        ...path([[694, 837], [694, 592], [679, 592], [679, 553],
+          [694, 553], [694, 477], [636, 477], [636, 613]]),
+        { x: padX, y: top }, { x: padX, y: y(837) },
+        point([573, 837])
+      ];
+      // Высоту зацепа задаёт нижняя часть хвостовика, а паз повторяет его кромку.
+      const biteY = base + (peak.y - base) * 0.17;
+      const edgeIndex = right.findIndex(p => p.y > biteY);
+      const bite = edgeIndex > 0 ? atY(right[edgeIndex - 1], right[edgeIndex], biteY) : right[0];
+      const crown = right.findIndex(p => p.y === peak.y);
+      const shoulder = right[crown];
+      const jaw = [
+        bite, ...right.slice(Math.max(0, edgeIndex), crown + 1), { x: shoulder.x, y: y(770) },
+        ...path([[750, 770], [762, 782], [762, 938], [714, 1042]]),
+        { x: Math.min(bite.x, x(695)), y: bite.y }
+      ];
+      const upper = path([[694, 327], [721, 327], [758, 390], [758, 489],
+        [722, 553], [694, 553], [694, 516], [698, 511], [698, 369], [694, 365]]);
+      const beam = path([[379, 25], [694, 25], [694, 404], [636, 404], [636, 613], [379, 613]]);
+      const screw = path([[499, 861], [515, 861], [515, 838], [559, 838],
+        [559, 861], [573, 861], [573, 904], [559, 904], [559, 926],
+        [515, 926], [515, 904], [499, 904]]);
+      const spring = path([[637, 908], [644, 852], [657, 914], [664, 852],
+        [677, 914], [684, 852], [697, 911]]);
+      return [body, jaw, upper, beam, screw, spring].map(poly => mirror ? G.mirrorX(poly) : poly);
     }
     let parts;
     if (top > peak.y) {

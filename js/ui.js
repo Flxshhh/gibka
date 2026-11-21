@@ -1213,7 +1213,7 @@
     const w = b.x1 - b.x0, hgt = b.y1 - b.y0, m = Math.max(w, hgt) * 0.04 + 2, fs = Math.max(w, hgt) / 16;
     const vb = SV.viewBox({ x0: b.x0 - m, x1: b.x1 + m, y0: b.y0 - m, y1: b.y1 + m }, 0);
     const pic = (pl, t, label, gauge) => {
-      let h = SV.path(sim.pad, 'ps-mach') + SV.path(sim.die.poly, 'ps-tool') + t.holder.map(p => SV.path(p, 'ps-mach')).join('') + SV.path(t.tang, 'ps-mach') + SV.path(t.punch, 'ps-tool') +
+      let h = SV.path(sim.pad, 'ps-mach') + SV.path(sim.die.poly, 'ps-tool') + sim.mountSection(pl.tipY).map((p, i) => SV.path(p, i === 5 ? 'ps-spring' : i === 1 || i === 2 || i === 4 ? 'ps-tool' : 'ps-mach', i !== 5)).join('') + SV.path(t.tang, 'ps-mach') + SV.path(t.punch, 'ps-tool') +
         SV.path(pl.poly, 'ps-sheet') + SV.path(s.face === 'A' ? pl.A : pl.B, 'ps-face', false);
       if (gauge && s.stop != null) {
         h += SV.path(G.rect(s.stop, sim.dieTop - fs * 0.25, s.stop + fs * 0.4, sim.dieTop + S + fs * 0.9), 'ps-gauge');
@@ -1492,7 +1492,7 @@
       PLAYER.openY = Math.min(sim.tipOpen, Math.max(c.y1, tipMax) + 15);
       c = G.bounds([{ x: -V, y: sim.dieTop }, { x: V, y: sim.dieTop }], c);
       const t = sim.tools(PLAYER.openY);
-      c = G.bounds(t.punch.concat(t.tang), c);
+      c = G.bounds(t.punch.concat(t.tang, sim.mountSection(PLAYER.openY).filter((_, i) => i !== 3).flat()), c);
       const size = Math.max(c.x1 - c.x0, c.y1 - c.y0, 30);
       c.y0 = Math.min(c.y0, sim.dieTop - size * 0.12);
       c.y1 += size * 0.08;
@@ -1500,14 +1500,14 @@
       c.x0 -= w2; c.x1 += w2;
       return c;
     }
-    let b = G.bounds(sim.die.poly.concat(sim.padSection, sim.mountSection(sim.tipOpen).flat()));
+    let b = G.bounds(sim.die.poly.concat(sim.padSection, sim.mountSection(sim.tipOpen).filter((_, i) => i !== 3).flat()));
     b = G.bounds([{ x: -60, y: -30 }, { x: 60, y: -30 }], b);
     const done = [];
     plan.steps.forEach(s => {
       for (const f of [0, 1]) b = G.bounds(sim.place(sim.fracs(done, s.bend, f), s.bend, s.mirror).poly, b);
       done.push(s.bend);
     });
-    b.y1 = Math.max(b.y1, sim.tipOpen + sim.punchInfo.H + Math.min(m.holderH, 60));
+    b.y1 = Math.max(b.y1, sim.tipOpen + sim.punchInfo.H + m.holderH * 1.7);
     b.y0 = Math.min(b.y0, -30);
     const w = b.x1 - b.x0;
     b.x0 -= w * 0.06; b.x1 += w * 0.06;
@@ -1617,8 +1617,13 @@
       g.fillStyle = '#64707d'; g.font = '500 15px "JetBrains Mono", Consolas, monospace'; g.textAlign = 'center'; g.textBaseline = 'top';
       g.fillText('упор ' + fmt(fr.s.stop, 1), X(fr.s.stop + w / 2), Y(y - fr.fs * 0.5) + 4);
     }
-    poly(fr.t.beam, MF, hit('балка') ? RED : ME, hit('балка') ? 3 : 1.5);
-    fr.sim.mountSection(fr.tip).forEach((p, i) => poly(p, i ? TF : MF, hit('зажим пуансона') ? RED : ME, hit('зажим пуансона') ? 3 : 1.5));
+    const mount = fr.sim.mountSection(fr.tip);
+    if (mount.length < 6) poly(fr.t.beam, MF, hit('балка') ? RED : ME, 1.5);
+    mount.forEach((p, i) => {
+      const beam = i === 3, spring = i === 5;
+      const active = hit(beam ? 'балка' : 'зажим пуансона');
+      poly(p, spring ? null : i && !beam ? TF : MF, active ? RED : spring ? TE : ME, active ? 3 : 1.5, !spring);
+    });
     poly(fr.t.tang, MF, ME, 1.5);
     poly(fr.t.punch, TF, hit('пуансон') ? RED : TE, hit('пуансон') ? 3 : 1.5);
     poly(fr.sheet, '#ffffff', fr.hits.length ? RED : '#2f3437', 2.2);
@@ -1937,7 +1942,10 @@
         h += SV.path(G.rect(s.stop, y - fs * 0.4, s.stop + fs * 0.45, y + ST.part.S + fs * 1.2), 'gauge');
         h += SV.text({ x: s.stop + fs * 0.25, y: y - fs * 0.9 }, 'упор ' + fmt(s.stop, 1), fs * 0.6, 'lbl-s');
       }
-      h += SV.path(t.beam, 'm-beam' + cls('балка')) + sim.mountSection(tip).map((p, i) => SV.path(p, (i ? 'm-jaw' : 'm-holder') + cls('зажим пуансона'))).join('') +
+      const mount = sim.mountSection(tip);
+      if (mount.length < 6) h += SV.path(t.beam, 'm-beam' + cls('балка'));
+      const mountClasses = ['m-holder', 'm-jaw', 'm-jaw', 'm-beam', 'm-jaw', 'm-spring'];
+      h += mount.map((p, i) => SV.path(p, mountClasses[i] + cls(i === 3 ? 'балка' : 'зажим пуансона'), i !== 5)).join('') +
         SV.path(t.tang, 'm-tang') + SV.path(t.punch, 'm-punch' + cls('пуансон')) +
         SV.path(sheet, 'sheet' + (hits.length ? ' hit' : '')) + SV.path(face, 'faceUp', false);
       hits.forEach(x => x.hits.forEach(p => { h += SV.circle(p, fs * 0.35, 'hitpt'); }));

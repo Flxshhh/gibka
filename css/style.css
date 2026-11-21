@@ -319,6 +319,7 @@ svg .dim-t { fill: var(--dim); }
 #simSvg { shape-rendering: geometricPrecision; cursor: zoom-in; }
 #simSvg .m-punch, #simSvg .m-die { fill: var(--sim-tool); stroke: var(--sim-tool-edge); stroke-width: .8; }
 #simSvg .m-tang, #simSvg .m-holder, #simSvg .m-beam, #simSvg .m-pad, #simSvg .m-table { fill: var(--sim-mach); stroke: var(--sim-mach-edge); stroke-width: .8; }
+#simSvg .m-spring { fill: none; stroke: var(--sim-tool-edge); stroke-width: 1.1; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 #simSvg .m-jaw { fill: var(--sim-tool); stroke: var(--sim-mach-edge); stroke-width: .8; vector-effect: non-scaling-stroke; }
 #simSvg .sheet { fill: var(--sim-sheet); stroke: var(--sim-sheet-edge); stroke-width: 1.1; stroke-linejoin: round; }
 #simSvg .faceUp { stroke-width: 1.2; opacity: .9; }
@@ -446,6 +447,7 @@ thead th { font: 600 11.5px var(--f-body); text-transform: uppercase; letter-spa
   .pc-step { display: block; width: 100%; height: 38mm; }
   /* цвета как в симуляции на экране */
   .pc-step .ps-tool { fill: #979da3; stroke: #6f767c; stroke-width: .8; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+  .pc-step .ps-spring { fill: none; stroke: #606b78; stroke-width: .8; vector-effect: non-scaling-stroke; }
   .pc-step .ps-mach { fill: #c4cad2; stroke: #9ea5ad; stroke-width: .8; vector-effect: non-scaling-stroke; }
   .pc-step .ps-sheet { fill: #ffffff; stroke: #2f3437; stroke-width: 1.3; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
   .pc-step .ps-face { fill: none; stroke: #ffb300; stroke-width: 1.6; vector-effect: non-scaling-stroke; }
