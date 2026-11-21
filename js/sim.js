@@ -18,6 +18,8 @@
     this.punchInfo = ps;
     this.tangLocal = ctx.punchMirror ? G.mirrorX(ps.tang) : ps.tang;
     this.tangCx = ctx.punchMirror ? -ps.tangCx : ps.tangCx;   // зажим держит хвостовик
+    const tang = this.tangLocal.length ? this.tangLocal : this.punchLocal.filter(p => p.y > ps.H + 0.01);
+    this.holderX = tang.length ? G.bounds(tang).x1 : this.tangCx + G.PUNCH_FIX.TW / 2;
     // Положение носика при полностью открытом прессе
     this.tipOpen = m.D - m.holderH - ps.H;
     this.nb = ctx.an.bends.length;
@@ -63,7 +65,7 @@
     return {
       punch: G.translate(this.punchLocal, 0, tipY),
       tang: G.translate(this.tangLocal, 0, tipY),
-      holder: G.rect(this.tangCx - m.holderW / 2, hy, this.tangCx + m.holderW / 2, hy + m.holderH),
+      holder: G.rect(this.holderX, hy, this.holderX + m.holderW, hy + m.holderH),
       beam: G.rect(this.tangCx - 45, hy + m.holderH, this.tangCx + 45, hy + m.holderH + 600)
     };
   };

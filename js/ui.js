@@ -1742,15 +1742,16 @@
     if (v.key !== PLAYER.key) {
       v.key = PLAYER.key;
       v.scene.background = new THREE.Color(0xebedf0);
-      const TOOL = { color: 0xbac2ca, edges: true, edgeColor: 0x606a74, metal: 0.08 };
-      const FRAME = { color: 0x62717b, edges: true, edgeColor: 0x47545e, metal: 0.05 };
+      v.setMetalLighting();
+      const TOOL = { color: 0xd2d8df, edges: true, edgeColor: 0x747f89, metal: 0.88, roughness: 0.24 };
+      const FRAME = { color: 0x62717b, edges: true, edgeColor: 0x47545e, metal: 0.58, roughness: 0.37 };
       v.setPart('table', G.rect(-70, -40, 70, 0), Lt * 1.12, { color: 0xa1a7a8, metal: 0 });
       v.setPart('pad', sim.pad, Lt, TOOL);
       v.setPart('die', sim.die.poly, Lt, TOOL);
       v.setPart('punch', sim.punchLocal, Lt, TOOL);
       v.setPart('tang', sim.tangLocal, Lt, TOOL);
       const holderTop = H + Math.min(m.holderH, 70);
-      v.setPart('holder', G.rect(sim.tangCx - m.holderW / 2, H, sim.tangCx + m.holderW / 2, holderTop), Lt, FRAME);
+      v.setPart('holder', G.rect(sim.holderX, H, sim.holderX + m.holderW, holderTop), Lt, FRAME);
       v.setPart('beam', G.rect(sim.tangCx - 45, holderTop, sim.tangCx + 45, holderTop + 65), Lt * 1.1, FRAME);
       moving.forEach(n => { v.parts[n].position.y = PLAYER.openY || sim.tipOpen; });
       v.setPart('sheet', sheet, L, { color: 0x1565c0, metal: 0.1 });
@@ -1768,7 +1769,7 @@
     }
     moving.forEach(n => { v.parts[n].position.y = tip; });
     const transferring = transferProgress != null;
-    const mesh = v.setPart('sheet', transferring ? pl.poly : sheet, L, { color: hits.length ? 0xff3b30 : 0x536579, metal: 0.08, edges: true, edgeColor: hits.length ? 0x8a0f0a : 0x334252 });
+    const mesh = v.setPart('sheet', transferring ? pl.poly : sheet, L, { color: hits.length ? 0xff3b30 : 0x758b9f, metal: hits.length ? 0.18 : 0.79, roughness: 0.32, edges: true, edgeColor: hits.length ? 0x8a0f0a : 0x334252 });
     mesh.position.set(0, 0, 0);
     mesh.quaternion.identity();
     if (transferring) {

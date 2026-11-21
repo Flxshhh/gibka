@@ -72,6 +72,28 @@
     this.resize();
   };
 
+  View3D.prototype.setMetalLighting = function () {
+    if (this.metalEnvironment) return;
+    const studio = new THREE.Scene();
+    studio.background = new THREE.Color(0x626c77);
+    const panels = [
+      { size: [8, 3], position: [-4, 5, 2], color: 0xffffff },
+      { size: [3, 8], position: [4, 2, -3], color: 0xdce8fa },
+      { size: [7, 2], position: [-3, 0, -5], color: 0xb6c6d9 }
+    ];
+    for (const panel of panels) {
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(...panel.size), new THREE.MeshBasicMaterial({ color: panel.color }));
+      mesh.position.set(...panel.position);
+      mesh.lookAt(0, 0, 0);
+      studio.add(mesh);
+    }
+    const generator = new THREE.PMREMGenerator(this.renderer);
+    this.metalEnvironment = generator.fromScene(studio, 0.05);
+    this.scene.environment = this.metalEnvironment.texture;
+    generator.dispose();
+    studio.children.forEach(mesh => { mesh.geometry.dispose(); mesh.material.dispose(); });
+  };
+
   // Именованные части сцены (для 3D-гибки): контур вытягивается на длину, часть можно заменять и двигать по отдельности
   View3D.prototype.setPart = function (name, poly, length, o) {
     if (!this.ok) return null;
@@ -83,7 +105,7 @@
     o = o || {};
     const geo = new THREE.ExtrudeGeometry(new THREE.Shape(poly.map(p => new THREE.Vector2(p.x, p.y))), { depth: length, bevelEnabled: false });
     geo.translate(0, 0, -length / 2);
-    g.add(new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: o.color || 0x9fb4cf, metalness: o.metal != null ? o.metal : 0.35, roughness: 0.5 })));
+    g.add(new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: o.color || 0x9fb4cf, metalness: o.metal != null ? o.metal : 0.35, roughness: o.roughness ?? 0.5 })));
     if (o.edges) g.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo, 25), new THREE.LineBasicMaterial({ color: o.edgeColor || 0x5b6570 })));
     return g;
   };
