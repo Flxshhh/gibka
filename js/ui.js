@@ -28,10 +28,15 @@
   }
   function store(k, v) { if (VIEW) return; try { localStorage.setItem(KEY + k, JSON.stringify(v)); } catch (e) { /* без хранилища тоже работаем */ } }
 
+  function loadMachine(saved) {
+    return Object.assign(clone(LG.DEFAULT_MACHINE), saved, {
+      holderH: LG.DEFAULT_MACHINE.holderH, holderW: LG.DEFAULT_MACHINE.holderW
+    });
+  }
   const ST = {
     punches: load('punches', []),   // «Мои» — личные, в браузере; общий каталог — LG.CATALOG
     dies: load('dies', []).filter(d => d && d.V > 0 && d.angle > 0 && d.H > 0),
-    machine: Object.assign(clone(LG.DEFAULT_MACHINE), load('machine', {})),
+    machine: loadMachine(load('machine', {})),
     parts: load('parts', []),
     part: Object.assign(clone(LG.DEFAULT_PART), load('part', {})),
     ui: Object.assign({ tab: 'part', pview: 'draw', segMode: 'straight', segDir: 45, segLen: 20, editPunch: null, editDie: null }, load('ui', {}), { punchQ: '', dieQ: '' })
@@ -84,7 +89,7 @@
     const vpu = VIEW.punch, vdi = VIEW.die;
     if (vpu && vpu.id && (vpu.type !== 'custom' ? vpu.Hb > 0 && vpu.W > 0 : okOutline(vpu) && vpu.H > 0 && vpu.Hb > 0)) ST.punches = ST.punches.filter(x => x.id !== vpu.id).concat([vpu]);
     if (vdi && vdi.id && vdi.V > 0 && vdi.angle > 0 && vdi.H > 0 && (vdi.type !== 'custom' || okOutline(vdi))) ST.dies = ST.dies.filter(x => x.id !== vdi.id).concat([vdi]);
-    if (VIEW.machine) ['D', 'holderH', 'holderW', 'padH', 'padW', 'maxTon'].forEach(k => { if (isFinite(+VIEW.machine[k]) && +VIEW.machine[k] >= 0) ST.machine[k] = +VIEW.machine[k]; });
+    if (VIEW.machine) ['D', 'padH', 'padW', 'maxTon'].forEach(k => { if (isFinite(+VIEW.machine[k]) && +VIEW.machine[k] >= 0) ST.machine[k] = +VIEW.machine[k]; });
     ST.ui = Object.assign({}, ST.ui, { tab: 'sim' });
   }
 
@@ -1056,7 +1061,7 @@
   // Просвет между кромкой поднятого пуансона и верхом матрицы: стол → подложка → матрица … пуансон → крепление → балка
   function gapRow(r) {
     if (!r.punch) return '';
-    const m = ST.machine, gap = m.D - m.holderH - G.punchShape(r.punch).H - (m.padH + r.die.H);
+    const m = ST.machine, gap = m.D - m.holderH - G.punchShape(r.punch).H - (LG.Sim.dieBase(r.die, m) + r.die.H);
     const need = r.S + 5;
     return kv('Просвет', '<b class="' + (gap < need ? 'bad' : '') + '">' + fmt(gap, 0) + ' мм</b>' + (gap < need
       ? ' — инструмент не помещается: пуансон + матрица + подложка выше открытой высоты пресса (' + fmt(m.D, 0) + ' мм)'
@@ -1213,7 +1218,7 @@
     const w = b.x1 - b.x0, hgt = b.y1 - b.y0, m = Math.max(w, hgt) * 0.04 + 2, fs = Math.max(w, hgt) / 16;
     const vb = SV.viewBox({ x0: b.x0 - m, x1: b.x1 + m, y0: b.y0 - m, y1: b.y1 + m }, 0);
     const pic = (pl, t, label, gauge) => {
-      let h = SV.path(sim.pad, 'ps-mach') + SV.path(sim.die.poly, 'ps-tool') + sim.mountSection(pl.tipY).map((p, i) => SV.path(p, i === 5 ? 'ps-spring' : i === 1 || i === 2 || i === 4 ? 'ps-tool' : 'ps-mach', i !== 5)).join('') + SV.path(t.tang, 'ps-mach') + SV.path(t.punch, 'ps-tool') +
+      let h = SV.path(sim.pad, 'ps-mach') + SV.path(sim.die.poly, 'ps-tool') + sim.mountSection(pl.tipY).map((p, i) => SV.path(p, i === 0 || i === 3 ? 'ps-mach' : 'ps-tool')).join('') + SV.path(t.tang, 'ps-mach') + SV.path(t.punch, 'ps-tool') +
         SV.path(pl.poly, 'ps-sheet') + SV.path(s.face === 'A' ? pl.A : pl.B, 'ps-face', false);
       if (gauge && s.stop != null) {
         h += SV.path(G.rect(s.stop, sim.dieTop - fs * 0.25, s.stop + fs * 0.4, sim.dieTop + S + fs * 0.9), 'ps-gauge');
@@ -1507,7 +1512,7 @@
       for (const f of [0, 1]) b = G.bounds(sim.place(sim.fracs(done, s.bend, f), s.bend, s.mirror).poly, b);
       done.push(s.bend);
     });
-    b.y1 = Math.max(b.y1, sim.tipOpen + sim.punchInfo.H + m.holderH * 1.7);
+    b.y1 = Math.max(b.y1, sim.tipOpen + sim.punchInfo.H + m.holderH * 1.85);
     b.y0 = Math.min(b.y0, -30);
     const w = b.x1 - b.x0;
     b.x0 -= w * 0.06; b.x1 += w * 0.06;
@@ -1618,11 +1623,10 @@
       g.fillText('упор ' + fmt(fr.s.stop, 1), X(fr.s.stop + w / 2), Y(y - fr.fs * 0.5) + 4);
     }
     const mount = fr.sim.mountSection(fr.tip);
-    if (mount.length < 6) poly(fr.t.beam, MF, hit('балка') ? RED : ME, 1.5);
     mount.forEach((p, i) => {
-      const beam = i === 3, spring = i === 5;
+      const beam = i === 3;
       const active = hit(beam ? 'балка' : 'зажим пуансона');
-      poly(p, spring ? null : i && !beam ? TF : MF, active ? RED : spring ? TE : ME, active ? 3 : 1.5, !spring);
+      poly(p, i && !beam ? TF : MF, active ? RED : ME, active ? 3 : 1.5);
     });
     poly(fr.t.tang, MF, ME, 1.5);
     poly(fr.t.punch, TF, hit('пуансон') ? RED : TE, hit('пуансон') ? 3 : 1.5);
@@ -1943,9 +1947,8 @@
         h += SV.text({ x: s.stop + fs * 0.25, y: y - fs * 0.9 }, 'упор ' + fmt(s.stop, 1), fs * 0.6, 'lbl-s');
       }
       const mount = sim.mountSection(tip);
-      if (mount.length < 6) h += SV.path(t.beam, 'm-beam' + cls('балка'));
-      const mountClasses = ['m-holder', 'm-jaw', 'm-jaw', 'm-beam', 'm-jaw', 'm-spring'];
-      h += mount.map((p, i) => SV.path(p, mountClasses[i] + cls(i === 3 ? 'балка' : 'зажим пуансона'), i !== 5)).join('') +
+      const mountClasses = ['m-holder', 'm-jaw', 'm-jaw', 'm-beam', 'm-jaw'];
+      h += mount.map((p, i) => SV.path(p, mountClasses[i] + cls(i === 3 ? 'балка' : 'зажим пуансона'))).join('') +
         SV.path(t.tang, 'm-tang') + SV.path(t.punch, 'm-punch' + cls('пуансон')) +
         SV.path(sheet, 'sheet' + (hits.length ? ' hit' : '')) + SV.path(face, 'faceUp', false);
       hits.forEach(x => x.hits.forEach(p => { h += SV.circle(p, fs * 0.35, 'hitpt'); }));
@@ -1956,6 +1959,7 @@
     const b = R.an.bends[s.bend];
     hud.innerHTML = '<div class="hud-t">Шаг ' + (k + 1) + ' из ' + n + ' · Гиб Г' + (s.bend + 1) + ' на ' + fmt(b.incl, 0) + '° · <span class="muted">' + phase + '</span></div>' +
       '<div>' + s.notes.map(esc).concat(['к упору ' + s.backEdge]).concat(s.stop != null ? ['упор ' + fmt(s.stop, 1) + ' мм'] : []).join(' · ') + '</div>' +
+      (sim.dieAdapterUnseated ? '<div class="bad">WPM 60: подходящий нижний паз не найден. Посадка показана условно.</div>' : '') +
       (hits.length ? '<div class="bad">Столкновение: ' + uniq(hitTools).join(', ') + '</div>' : '');
     if (slider && document.activeElement !== slider) slider.value = T ? Math.round(PLAYER.t / T * 1000) : 0;
     if (PLAYER.recDraw) PLAYER.recDraw({ sim, s, sheet, face, t, tip, hits, hitTools, v, fs, showStop: slide === 0 && u < 0.8,
@@ -1968,8 +1972,7 @@
   // =====================================================================
   const DIE_F = [['V', 'Раскрытие V', 1, 2, 1], ['angle', 'Угол V, °', 1, 20, 1], ['r', 'Радиус плеча', 0.1, 0.1, 2],
     ['H', 'Высота', 1, 10, 1], ['W', 'Ширина', 1, 10, 1]];
-  const MACH_F = [['D', 'Открытая высота (стол → балка)', 5, 100, 0], ['holderH', 'Высота крепления пуансона', 5, 0, 0],
-    ['holderW', 'Ширина крепления', 5, 10, 0], ['padH', 'Высота подложки', 1, 0, 0], ['padW', 'Ширина подложки', 5, 10, 0],
+  const MACH_F = [['D', 'Открытая высота (стол → балка)', 5, 100, 0], ['padH', 'Высота подложки', 1, 0, 0], ['padW', 'Ширина подложки', 5, 10, 0],
     ['maxTon', 'Макс. усилие пресса, т', 5, 1, 0]];
 
   function renderDiesTab() {
@@ -2128,7 +2131,7 @@
       const d = JSON.parse(txt);
       if (Array.isArray(d.punches)) ST.punches = d.punches.filter(x => !isCat(x.id));
       if (Array.isArray(d.dies)) ST.dies = d.dies.filter(x => !isCat(x.id));
-      if (d.machine) ST.machine = Object.assign(clone(LG.DEFAULT_MACHINE), d.machine);
+      if (d.machine) ST.machine = loadMachine(d.machine);
       if (Array.isArray(d.parts)) ST.parts = d.parts;
       saveAll(); renderDiesTab(); toast('Загружено');
     } catch (err) { toast('Не получилось прочитать копию: проверьте, что текст вставлен целиком'); }

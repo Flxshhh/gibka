@@ -3,7 +3,7 @@
 (function () {
   const G = LG.G;
 
-  function holderShape(ps, machine, mirror, height, section) {
+  function holderShape(ps, machine, mirror, height) {
     if (height <= 0) return [];
     const outline = ps.tang.length ? ps.tang : ps.outline;
     // У DXF плечико может быть на доли миллиметра выше номинальной Hb.
@@ -33,43 +33,6 @@
     const bounds = G.bounds(left.concat(right));
     const x0 = Math.min(ps.tangCx - machine.holderW / 2, bounds.x0 - 1);
     const x1 = Math.max(ps.tangCx + machine.holderW / 2, bounds.x1 + 1);
-    if (section && top > peak.y) {
-      const span = Math.max(bounds.x1 - bounds.x0, 6);
-      const x = px => bounds.x0 + (px - 573) * span / 122;
-      const y = py => py >= 930
-        ? base + (1063 - py) * (peak.y - base) / 133
-        : peak.y + (930 - py) * (top - peak.y) / 317;
-      const point = ([px, py]) => ({ x: x(px), y: y(py) });
-      const path = points => points.map(point);
-      const padX = Math.min(x(515), x0);
-      const body = [
-        ...left, { x: x(636), y: y(837) },
-        ...path([[694, 837], [694, 592], [679, 592], [679, 553],
-          [694, 553], [694, 477], [636, 477], [636, 613]]),
-        { x: padX, y: top }, { x: padX, y: y(837) },
-        point([573, 837])
-      ];
-      // Высоту зацепа задаёт нижняя часть хвостовика, а паз повторяет его кромку.
-      const biteY = base + (peak.y - base) * 0.17;
-      const edgeIndex = right.findIndex(p => p.y > biteY);
-      const bite = edgeIndex > 0 ? atY(right[edgeIndex - 1], right[edgeIndex], biteY) : right[0];
-      const crown = right.findIndex(p => p.y === peak.y);
-      const shoulder = right[crown];
-      const jaw = [
-        bite, ...right.slice(Math.max(0, edgeIndex), crown + 1), { x: shoulder.x, y: y(770) },
-        ...path([[750, 770], [762, 782], [762, 938], [714, 1042]]),
-        { x: Math.min(bite.x, x(695)), y: bite.y }
-      ];
-      const upper = path([[694, 327], [721, 327], [758, 390], [758, 489],
-        [722, 553], [694, 553], [694, 516], [698, 511], [698, 369], [694, 365]]);
-      const beam = path([[379, 25], [694, 25], [694, 404], [636, 404], [636, 613], [379, 613]]);
-      const screw = path([[499, 861], [515, 861], [515, 838], [559, 838],
-        [559, 861], [573, 861], [573, 904], [559, 904], [559, 926],
-        [515, 926], [515, 904], [499, 904]]);
-      const spring = path([[637, 908], [644, 852], [657, 914], [664, 852],
-        [677, 914], [684, 852], [697, 911]]);
-      return [body, jaw, upper, beam, screw, spring].map(poly => mirror ? G.mirrorX(poly) : poly);
-    }
     let parts;
     if (top > peak.y) {
       parts = [[{ x: x0, y: base }, ...left, ...right.slice(0, -1).reverse(),
@@ -84,6 +47,55 @@
       });
     }
     return mirror ? parts.map(G.mirrorX) : parts;
+  }
+
+  // Сечение из «Держатель пуансона.doc». Начало по посадочному плечу;
+  // x = 7..20 мм — гнездо хвостовика. Недоразмеренные скосы сняты с рисунка.
+  function punchMountSection(H, mirror) {
+    const profiles = [
+      [[7, 0], [-7, 0], [-7, 28], [-20, 28], [-20, 100],
+        [7, 100], [7, 130], [20, 130], [20, 116], [16.5, 116],
+        [16.5, 104], [20, 104], [20, 32], [7, 32]],
+      [[20, 85], [36, 85], [36, 22], [27, 7],
+        [23, 7], [16.5, 10.5], [16.5, 14], [20, 14]],
+      [[20, 109], [30.5, 109], [36.5, 125], [36.5, 161],
+        [30.5, 167], [20, 167], [20, 152], [26.5, 152], [26.5, 133], [20, 133]],
+      [[-20, 100], [-20, 199], [24.5, 212], [24.5, 185],
+        [20, 177], [20, 132], [7, 132], [7, 100]],
+      [[21.5, 137], [26.5, 137], [26.5, 133], [36.5, 133],
+        [36.5, 151], [26.5, 151], [26.5, 147], [21.5, 147]]
+    ];
+    const parts = profiles.map(poly => poly.map(([x, y]) => ({ x, y: H + y })));
+    return mirror ? parts.map(G.mirrorX) : parts;
+  }
+
+  const adapterWidth = 60, adapterBase = 20, keyWidth = 15, keyHeight = 5;
+
+  // WPM 60: 60 × 20, выступ 15 × 5 на расстоянии 9,5 от левого края, R1 у основания.
+  function dieAdapter(die) {
+    if (!(die.others?.length || /^(Двухручьевые|Многоручьевые)$/.test(die.group || ''))) return null;
+    const outline = die.outline || [];
+    const low = outline.length ? Math.min(...outline.map(p => p[1])) : 0;
+    const recess = outline.map((a, i) => {
+      const b = outline[(i + 1) % outline.length];
+      return { x: (a[0] + b[0]) / 2, y: (a[1] + b[1]) / 2 - low,
+        width: Math.abs(a[0] - b[0]), rise: Math.abs(a[1] - b[1]) };
+    }).find(e => e.rise < 0.15 && e.y >= keyHeight && e.y < 10 && e.width >= keyWidth - 0.05);
+    const bottom = outline.filter(p => p[1] <= low + 0.5).map(p => p[0]);
+    const center = bottom.length ? (Math.min(...bottom) + Math.max(...bottom)) / 2 : 0;
+    const x = (recess?.x ?? center) - 17;
+    const profile = [
+      { x: 0, y: 0 }, { x: adapterWidth, y: 0 }, { x: adapterWidth, y: adapterBase },
+      ...G.arc({ x: 24.5, y: 20 }, 1, 0, Math.PI / 2, 10),
+      { x: 24.5, y: adapterBase + keyHeight }, { x: 9.5, y: adapterBase + keyHeight },
+      ...G.arc({ x: 9.5, y: 20 }, 1, Math.PI / 2, Math.PI, 10),
+      { x: 0, y: adapterBase }
+    ];
+    return { poly: G.translate(profile, x, 0), base: recess ? adapterBase : adapterBase + keyHeight, seated: !!recess };
+  }
+
+  function dieBase(die, machine) {
+    return dieAdapter(die)?.base ?? machine.padH;
   }
 
   // Полка адаптера под нижней гранью матрицы и боковые бортики.
@@ -112,10 +124,12 @@
   function Sim(ctx) {
     this.ctx = ctx;
     const m = ctx.machine;
-    this.dieBase = m.padH;
-    this.die = G.dieShape(ctx.die, m.padH);
+    const adapter = dieAdapter(ctx.die);
+    this.dieBase = adapter?.base ?? m.padH;
+    this.dieAdapterUnseated = adapter?.seated === false;
+    this.die = G.dieShape(ctx.die, this.dieBase);
     this.dieTop = this.die.top;
-    this.pad = G.rect(-m.padW / 2, 0, m.padW / 2, m.padH);
+    this.pad = adapter?.poly ?? G.rect(-m.padW / 2, 0, m.padW / 2, m.padH);
     this.table = [{ x: -70, y: 0 }, { x: 70, y: 0 }, { x: 70, y: -35 }, { x: 30, y: -35 }, { x: 30, y: -400 },
       { x: -30, y: -400 }, { x: -30, y: -35 }, { x: -70, y: -35 }];
     const ps = G.punchShape(ctx.punch);
@@ -124,8 +138,8 @@
     this.tangLocal = ctx.punchMirror ? G.mirrorX(ps.tang) : ps.tang;
     this.tangCx = ctx.punchMirror ? -ps.tangCx : ps.tangCx;   // зажим держит хвостовик
     this.holderLocal = holderShape(ps, m, ctx.punchMirror, m.holderH);
-    this.holderSection = holderShape(ps, m, ctx.punchMirror, m.holderH, true);
-    this.padSection = dieMountSection(this.die.poly, m);
+    this.holderSection = punchMountSection(ps.H, ctx.punchMirror);
+    this.padSection = adapter?.poly ?? dieMountSection(this.die.poly, m);
     this.holderView = m.holderH > 70 ? holderShape(ps, m, ctx.punchMirror, 70) : this.holderLocal;
     // Положение носика при полностью открытом прессе
     this.tipOpen = m.D - m.holderH - ps.H;
@@ -336,5 +350,6 @@
     return { steps, ok, auto };
   };
 
+  Sim.dieBase = dieBase;
   LG.Sim = Sim;
 })();
