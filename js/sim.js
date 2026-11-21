@@ -118,11 +118,12 @@
     this.table = [{ x: -70, y: 0 }, { x: 70, y: 0 }, { x: 70, y: -35 }, { x: 30, y: -35 }, { x: 30, y: -400 },
       { x: -30, y: -400 }, { x: -30, y: -35 }, { x: -70, y: -35 }];
     const ps = G.punchShape(ctx.punch);
-    this.punchLocal = ctx.punchMirror ? G.mirrorX(ps.poly) : ps.poly;
+    const mirror = !ctx.punchMirror;
+    this.punchLocal = mirror ? G.mirrorX(ps.poly) : ps.poly;
     this.punchInfo = ps;
-    this.tangLocal = ctx.punchMirror ? G.mirrorX(ps.tang) : ps.tang;
-    this.tangCx = ctx.punchMirror ? -ps.tangCx : ps.tangCx;   // зажим держит хвостовик
-    this.holderSection = punchMountSection(ps, ctx.punchMirror);
+    this.tangLocal = mirror ? G.mirrorX(ps.tang) : ps.tang;
+    this.tangCx = mirror ? -ps.tangCx : ps.tangCx;   // зажим держит хвостовик
+    this.holderSection = punchMountSection(ps, mirror);
     this.padSection = dieMountSection(adapter ? this.adapter : this.die.poly, m);
     // Положение носика при полностью открытом прессе
     this.tipOpen = m.D - m.holderH - ps.H;

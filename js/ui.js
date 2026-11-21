@@ -1037,8 +1037,8 @@
       picker('punch', 'Пуансон', r.punch ? punchThumb(r.punch) + '<span><b>' + esc(r.punch.name) + '</b><span class="muted small">' + punchKind(r.punch) + ' · A' + fmt(r.punch.H, 1) +
         (r.punch.angle ? ' · ' + fmt(r.punch.angle, 0) + '°' : '') + '</span></span>' : '—') +
       '<div class="field"><label>Выемка пуансона (гусак)</label><select id="mirSel">' +
-      '<option value="0"' + (!p.punchMirror ? ' selected' : '') + '>к оператору</option>' +
-      '<option value="1"' + (p.punchMirror ? ' selected' : '') + '>к упору</option></select></div>' +
+      '<option value="0"' + (!p.punchMirror ? ' selected' : '') + '>к упору</option>' +
+      '<option value="1"' + (p.punchMirror ? ' selected' : '') + '>к оператору</option></select></div>' +
       picker('die', 'Матрица', r.auto ? (r.die.id !== 'auto' ? dieThumb(r.die) : '') + '<span><b>Авто по таблице</b><span class="muted small">' +
         (r.die.id !== 'auto' ? esc(r.die.name) + ' · ' : '') + 'V' + fmt(r.V, 1) + ' · ' + fmt(r.die.angle, 0) + '°</span></span>'
         : dieThumb(r.die) + '<span><b>' + esc(r.die.name) + '</b><span class="muted small">V' + fmt(r.die.V, 1) + ' · ' + fmt(r.die.angle, 0) + '° · H' + fmt(r.die.H, 0) + '</span></span>') +
@@ -1110,8 +1110,8 @@
       if (PLAYER.altsBusy && !(PLAYER.alts && PLAYER.alts.length)) h += '<div class="small muted">Подбираю пуансон, который подойдёт…</div>';
       else if (PLAYER.alts && PLAYER.alts.length) {
         h += '<div class="alts">Подойдут без удара, например: ' + PLAYER.alts.map((a, i) =>
-          '<button type="button" class="sm" data-alt="' + i + '">' + (a.same ? 'этот же, выемкой ' + (a.mirror ? 'к упору' : 'к оператору')
-            : esc(a.name) + ' · A' + fmt(a.H, 0) + (a.angle ? ' · ' + fmt(a.angle, 0) + '°' : '') + (a.mirror !== !!ST.part.punchMirror ? ' · выемкой ' + (a.mirror ? 'к упору' : 'к оператору') : '')) +
+          '<button type="button" class="sm" data-alt="' + i + '">' + (a.same ? 'этот же, выемкой ' + (a.mirror ? 'к оператору' : 'к упору')
+            : esc(a.name) + ' · A' + fmt(a.H, 0) + (a.angle ? ' · ' + fmt(a.angle, 0) + '°' : '') + (a.mirror !== !!ST.part.punchMirror ? ' · выемкой ' + (a.mirror ? 'к оператору' : 'к упору') : '')) +
           '</button>').join(' ') + '</div>';
       } else if (auto) h += '<div class="small">' + (PLAYER.alts && PLAYER.alts.exhausted
           ? 'Ни один пуансон из каталога и «Моих» не подходит с этой матрицей.'
@@ -1122,7 +1122,7 @@
         else if (PLAYER.dieAlts && PLAYER.dieAlts.length) h += '<div class="alts">' + (PLAYER.alts && PLAYER.alts.length ? 'Или оставить пуансон и поменять матрицу' : 'С этим пуансоном получится, если поменять матрицу') +
           ' <span class="muted">(по таблице, среднее V' + PLAYER.dieVmid + ')</span>: ' + PLAYER.dieAlts.map(d =>
             '<button type="button" class="sm" data-sugdie="' + d.id + '"' + (d.mirror !== !!ST.part.punchMirror ? ' data-mir="' + (d.mirror ? 1 : 0) + '"' : '') + '>' + esc(d.name) + ' · V' + fmt(d.V, 1) + ' · ' + fmt(d.angle, 0) + '°' +
-            (d.mirror !== !!ST.part.punchMirror ? ' · выемкой ' + (d.mirror ? 'к упору' : 'к оператору') : '') + '</button>').join(' ') + '</div>';
+            (d.mirror !== !!ST.part.punchMirror ? ' · выемкой ' + (d.mirror ? 'к оператору' : 'к упору') : '') + '</button>').join(' ') + '</div>';
         else if (auto && !(PLAYER.alts && PLAYER.alts.length)) h += '<div class="small">Сменой матрицы по таблице тоже не получается — нужна другая деталь или порядок гибов вручную.</div>';
       }
       h += '</div>';
@@ -1242,7 +1242,7 @@
     h += '<div class="pc-cols"><table class="pc-kv">' +
       row('Лист', mat + ', S = ' + fmt(r.S, 2) + ' мм') +
       row('Заготовка', '<b>' + fmt(r.an.flat, 2) + ' × ' + fmt(p.L, 0) + ' мм</b>') +
-      row('Пуансон', esc(r.punch.name) + (r.punch.angle ? ' · ' + fmt(r.punch.angle, 0) + '°' : '') + ' · R' + fmt(r.punch.r, 2) + (punchKind(r.punch) === 'Гусак' ? ' · выемкой ' + (p.punchMirror ? 'к упору' : 'к оператору') : '')) +
+      row('Пуансон', esc(r.punch.name) + (r.punch.angle ? ' · ' + fmt(r.punch.angle, 0) + '°' : '') + ' · R' + fmt(r.punch.r, 2) + (punchKind(r.punch) === 'Гусак' ? ' · выемкой ' + (p.punchMirror ? 'к оператору' : 'к упору') : '')) +
       row('Матрица', (r.die.id === 'auto' ? '' : esc(r.die.name) + ' · ') + 'V' + fmt(r.V, 1) + ' · ' + fmt(r.die.angle, 0) + '°') +
       row('Усилие', fmt(r.force.F, 0) + ' кН/м · на длину ≈ ' + fmt(r.ton, 1) + ' т') +
       row('Радиус гиба', 'Ri ≈ ' + fmt(r.Ri, 2) + ' мм · K = ' + fmt(r.K, 3)) +
