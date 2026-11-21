@@ -2160,14 +2160,13 @@
     const me = $('script[src*="js/ui.js"]'), m = me && /[?&]v=(\d{12})/.exec(me.getAttribute('src') || '');
     const box = $('#appVer');
     if (!m || !box) return;
-    const v = m[1], nice = x => x.slice(6, 8) + '.' + x.slice(4, 6) + '.' + x.slice(0, 4) + ' ' + x.slice(8, 10) + ':' + x.slice(10, 12);
-    box.textContent = 'версия ' + nice(v);
+    const v = m[1];
     if (location.protocol.indexOf('http') !== 0) return;
     // version.txt всегда запрашивается мимо кэша; если там номер новее — предлагаем обновить
     fetch('version.txt?t=' + Date.now(), { cache: 'no-store' }).then(r => r.ok ? r.text() : '').then(t => {
       const nv = (t || '').trim();
       if (!/^\d{12}$/.test(nv) || nv <= v) return;
-      box.innerHTML = 'версия ' + nice(v) + ' · <button type="button" class="link" id="appUpd">вышла новая (' + nice(nv) + ') — обновить</button>';
+      box.insertAdjacentHTML('beforeend', ' · <button type="button" class="link" id="appUpd">Доступно обновление</button>');
       $('#appUpd').addEventListener('click', () => { location.replace(location.pathname + '?u=' + nv); });
       toast('Вышла новая версия сайта — нажмите «обновить» внизу страницы');
     }).catch(() => { /* без сети — просто не проверяем */ });
