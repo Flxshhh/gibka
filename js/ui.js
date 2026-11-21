@@ -1744,34 +1744,10 @@
 
   const GAUGE_RETREAT = 35;
 
-  // Подъём начинается до подхода к препятствию. На каждом ребре максимум
-  // высоты за вычетом расстояния достигается на конце или на границе полосы.
-  function gaugeLift(sim, fingerX, railX) {
-    let lift = 0;
-    function checkStrip(left, right, bottom) {
-      const check = (x, y) => {
-        const distance = Math.max(left - x, x - right, 0);
-        lift = Math.max(lift, y - bottom - distance * 0.5);
-      };
-      for (const poly of [sim.die.poly, sim.adapter, sim.padSection, sim.table]) {
-        poly.forEach((p, i) => {
-          check(p.x, p.y);
-          const q = poly[(i + 1) % poly.length];
-          for (const x of [left, right]) {
-            if ((p.x < x) !== (q.x < x)) check(x, p.y + (q.y - p.y) * (x - p.x) / (q.x - p.x));
-          }
-        });
-      }
-    }
-    checkStrip(fingerX, railX + 15, sim.dieTop - 9);
-    checkStrip(railX, railX + 24, sim.dieTop - 30);
-    return lift;
-  }
-
   function gaugeClearance(sim, step, done) {
     if (step.stop == null) return 0;
-    const bottom = sim.dieTop - 9;
-    const top = sim.dieTop + 22 + gaugeLift(sim, step.stop, Math.max(step.stop + 35, G.bounds(sim.die.poly).x1 + 35));
+    const bottom = sim.dieTop;
+    const top = bottom + 31;
     let right = step.stop;
     for (let i = 1; i <= 32; i++) {
       const poly = sim.place(sim.fracs(done, step.bend, i / 32), step.bend, step.mirror).poly;
@@ -1871,8 +1847,8 @@
       v.setPart('sheet', sheet, L, { color: 0x1565c0, metal: 0.1 });
       const stops = PLAYER.plan.steps.map(step => step.stop).filter(stop => stop != null);
       v.gaugeOrigin = stops.length ? Math.min(...stops) : dieBounds.x1;
-      const railX = Math.max(dieBounds.x1 + 35, v.gaugeOrigin + 45);
-      v.setPart('gaugeRail', G.rect(railX, sim.dieTop - 30, railX + 24, sim.dieTop - 9), Lt, { color: 0xa1a7a8, metal: 0 });
+      const railX = Math.max(G.bounds(sim.die.poly.concat(sim.adapter, sim.padSection)).x1 + 35, v.gaugeOrigin + 45);
+      v.setPart('gaugeRail', G.rect(railX, sim.dieTop - 21, railX + 24, sim.dieTop), Lt, { color: 0xa1a7a8, metal: 0 });
       v.gaugeRailX = railX;
       v.gaugeStop = undefined;
       // размерная линия длины гиба — перед матрицей, со стороны оператора
@@ -1898,19 +1874,17 @@
     if (v.gaugeStop !== stop) {
       v.gaugeStop = stop;
       const y = sim.dieTop, railX = v.gaugeRailX, x = v.gaugeOrigin;
-      const finger = stop == null ? null : [{ x, y: y - 9 }, { x: railX + 15, y: y - 9 },
-        { x: railX + 15, y: y + 22 }, { x: x + 16, y: y + 22 },
-        { x: x + 16, y: y + 7 }, { x, y: y + 7 }];
+      const finger = stop == null ? null : [{ x, y }, { x: railX + 15, y },
+        { x: railX + 15, y: y + 31 }, { x: x + 16, y: y + 31 },
+        { x: x + 16, y: y + 16 }, { x, y: y + 16 }];
       for (const side of [-1, 1]) {
         const part = v.setPart('gauge' + side, finger, Math.min(42, L * 0.22), { color: 0x434743, edges: true, edgeColor: 0x30332f, metal: 0 });
         part.position.z = side * L * 0.22;
       }
     }
     const gaugeX = (stop ?? v.gaugeOrigin) - v.gaugeOrigin + gaugeOffset;
-    const lift = gaugeLift(sim, v.gaugeOrigin + gaugeX, v.gaugeRailX + gaugeX);
     for (const name of ['gaugeRail', 'gauge-1', 'gauge1']) {
       v.parts[name].position.x = gaugeX;
-      v.parts[name].position.y = lift;
     }
     const flyby = REC.flyby;
     if (flyby && flyby.input === v.cameraInput) {
