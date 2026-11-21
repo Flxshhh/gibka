@@ -554,19 +554,14 @@
   const ANG_CHIPS = [15, 30, 45, 60, 75];
   // Быстрый выбор направления в режиме «С углом»
   const DIR_CHIPS = [0, 45, 90, 135, 180, 225, 270, 315];
-  // Поворот от направления участка у активной точки, против часовой стрелки.
+  // Направление от активной точки по осям чертежа, против часовой стрелки.
   // Любое число приводится к 0…360, один знак после запятой (−30 → 330, 400 → 40).
   const segDir = () => { const a = +ST.ui.segDir; return isFinite(a) ? +((((Math.round(a * 10) / 10) % 360) + 360) % 360).toFixed(1) : 45; };
-  function segmentBaseDir() {
-    const { segs } = ST.part, cursor = cursorPos();
-    if (!segs.length) return 0;
-    return cursor === 0 ? +segs[0].dir + 180 : +segs[cursor - 1].dir;
-  }
   // После ввода угла — подсветить совпадающую кнопку и подпись направления, не перерисовывая поле
   function refreshDir() {
     const a = segDir();
     $$('#addForm [data-segdirq]').forEach(b => b.classList.toggle('on', +b.dataset.segdirq === a));
-    const t = $('#segDirTxt'); if (t) t.textContent = dirLabel(segmentBaseDir() + a);
+    const t = $('#segDirTxt'); if (t) t.textContent = fmt(a, 1) + '°';
     // кнопки −/+ за пределами круга: −1 → 359, 361 → 1 (пока печатают в поле — не трогаем)
     const inp = $('.stepper[data-key="segDir"] input');
     if (inp && document.activeElement !== inp && a !== +ST.ui.segDir) { ST.ui.segDir = a; inp.value = fmt(a, 1); saveAll(); }
@@ -609,10 +604,10 @@
     if (u.segMode === 'angle') {
       // угол направления по полному кругу 0…360°: числом, кнопками −/+ или быстрым выбором
       const a = segDir();
-      h += stepper('ui', 'segDir', a, 1, -360, 1, 'Поворот от участка у точки, °', 'f-ang f-ang-own');
+      h += stepper('ui', 'segDir', a, 1, -360, 1, 'Направление от синей точки, °', 'f-ang f-ang-own');
       h += '<div class="field f-ang"><div class="chips-sel dir-chips">' +
         DIR_CHIPS.map(d => '<button type="button" data-segdirq="' + d + '" class="' + (a === d ? 'on' : '') + '">' + d + '°</button>').join('') + '</div></div>';
-      h += '<div class="field f-dir"><button type="button" class="primary big add-ang" id="segAddAng">' + ic('plus') + 'Добавить: <span id="segDirTxt">' + dirLabel(segmentBaseDir() + a) + '</span></button></div>';
+      h += '<div class="field f-dir"><button type="button" class="primary big add-ang" id="segAddAng">' + ic('plus') + 'Добавить: <span id="segDirTxt">' + fmt(a, 1) + '°</span></button></div>';
     } else {
       h += '<div class="field f-dir"><label>Направление — нажмите, чтобы добавить</label><div class="pad-cross">' +
         STRAIGHT.map(d => '<button type="button" class="big d' + d[0] + '" data-adddir="' + d[0] + '" title="' + d[2] + '" aria-label="' + d[2] + '">' + ic('arrow', '', 90 - d[0]) + '</button>').join('') + '</div></div>';
@@ -860,12 +855,12 @@
       if (!visible) return null;
       drag.line.setAttribute('x2', drag.x + x);
       drag.line.setAttribute('y2', drag.y + y);
-      const angle = Math.atan2(-y, x) / G.RAD;
+      const angle = +((Math.atan2(-y, x) / G.RAD + 360) % 360).toFixed(2) % 360;
       const offset = 8 * Math.hypot(drag.inverse.a, drag.inverse.b);
       drag.label.setAttribute('x', drag.x + x / 2);
       drag.label.setAttribute('y', drag.y + y / 2 - offset);
-      drag.label.textContent = fmt(len, 2) + ' мм · ' + fmt(G.norm180(angle - drag.base), 1) + '°';
-      return { dir: +((angle + 360) % 360).toFixed(2) % 360, len };
+      drag.label.textContent = fmt(len, 2) + ' мм · ' + fmt(angle, 2) + '°';
+      return { dir: angle, len };
     };
     svg.addEventListener('pointerdown', e => {
       const vertex = e.target.closest('.vtx.on');
@@ -886,7 +881,7 @@
       const origin = new DOMPoint(e.clientX, e.clientY).matrixTransform(inverse);
       label.setAttribute('font-size', 13 * Math.hypot(inverse.a, inverse.b));
       svg.append(preview);
-      drag = { id: e.pointerId, vertex, preview, line, label, inverse, origin, base: segmentBaseDir(), x, y, clientX: e.clientX, clientY: e.clientY };
+      drag = { id: e.pointerId, vertex, preview, line, label, inverse, origin, x, y, clientX: e.clientX, clientY: e.clientY };
       svg.setPointerCapture(e.pointerId);
     });
     svg.addEventListener('pointermove', update);
@@ -943,7 +938,7 @@
       if (t.closest('#segAddAng')) {
         const a = segDir();
         if (a !== +ST.ui.segDir) { ST.ui.segDir = a; saveAll(); renderPartTab(); }
-        addSeg((segmentBaseDir() + a + 360) % 360); return;
+        addSeg(a); return;
       }
       if (q('[data-del]')) {
         const i = +q('[data-del]').dataset.del;
