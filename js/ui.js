@@ -1218,7 +1218,7 @@
     const w = b.x1 - b.x0, hgt = b.y1 - b.y0, m = Math.max(w, hgt) * 0.04 + 2, fs = Math.max(w, hgt) / 16;
     const vb = SV.viewBox({ x0: b.x0 - m, x1: b.x1 + m, y0: b.y0 - m, y1: b.y1 + m }, 0);
     const pic = (pl, t, label, gauge) => {
-      let h = SV.path(sim.padSection, 'ps-mach') + SV.path(sim.die.poly, 'ps-tool') + sim.mountSection(pl.tipY).map(p => SV.path(p, 'ps-mach')).join('') + SV.path(t.tang, 'ps-tool') + SV.path(t.punch, 'ps-tool') +
+      let h = SV.path(sim.padSection, 'ps-mach') + SV.path(sim.die.poly, 'ps-tool') + sim.mountSection(pl.tipY).map((p, i) => SV.path(p, i === 5 ? 'ps-mach ps-insert' : 'ps-mach')).join('') + SV.path(t.tang, 'ps-tool') + SV.path(t.punch, 'ps-tool') +
         SV.path(pl.poly, 'ps-sheet') + SV.path(s.face === 'A' ? pl.A : pl.B, 'ps-face', false);
       if (gauge && s.stop != null) {
         h += SV.path(G.rect(s.stop, sim.dieTop - fs * 0.25, s.stop + fs * 0.4, sim.dieTop + S + fs * 0.9), 'ps-gauge');
@@ -1626,7 +1626,7 @@
     mount.forEach((p, i) => {
       const beam = i === 3;
       const active = hit(beam ? 'балка' : 'зажим пуансона');
-      poly(p, MF, active ? RED : ME, active ? 3 : 1.5);
+      poly(p, i === 5 ? '#adb6c1' : MF, active ? RED : ME, active ? 3 : 1.5);
     });
     for (const part of [fr.t.tang, fr.t.punch]) poly(part, TF, hit('пуансон') ? RED : TE, hit('пуансон') ? 3 : 1.5);
     poly(fr.sheet, '#ffffff', fr.hits.length ? RED : '#2f3437', 2.2);
@@ -1946,7 +1946,7 @@
         h += SV.text({ x: s.stop + fs * 0.25, y: y - fs * 0.9 }, 'упор ' + fmt(s.stop, 1), fs * 0.6, 'lbl-s');
       }
       const mount = sim.mountSection(tip);
-      const mountClasses = ['m-holder', 'm-jaw', 'm-jaw', 'm-beam', 'm-jaw'];
+      const mountClasses = ['m-holder', 'm-jaw', 'm-jaw', 'm-beam', 'm-jaw', 'm-holder m-insert'];
       h += mount.map((p, i) => SV.path(p, mountClasses[i] + cls(i === 3 ? 'балка' : 'зажим пуансона'))).join('') +
         SV.path(t.tang, 'm-punch' + cls('пуансон')) + SV.path(t.punch, 'm-punch' + cls('пуансон')) +
         SV.path(sheet, 'sheet' + (hits.length ? ' hit' : '')) + SV.path(face, 'faceUp', false);
