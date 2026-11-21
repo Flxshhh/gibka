@@ -1961,7 +1961,6 @@
     const b = R.an.bends[s.bend];
     hud.innerHTML = '<div class="hud-t">Шаг ' + (k + 1) + ' из ' + n + ' · Гиб Г' + (s.bend + 1) + ' на ' + fmt(b.incl, 0) + '° · <span class="muted">' + phase + '</span></div>' +
       '<div>' + s.notes.map(esc).concat(['к упору ' + s.backEdge]).concat(s.stop != null ? ['упор ' + fmt(s.stop, 1) + ' мм'] : []).join(' · ') + '</div>' +
-      (sim.dieAdapterUnseated ? '<div class="bad">Матрица касается выступа WPM 60. Полная посадка на основание не подтверждена.</div>' : '') +
       (hits.length ? '<div class="bad">Столкновение: ' + uniq(hitTools).join(', ') + '</div>' : '');
     if (slider && document.activeElement !== slider) slider.value = T ? Math.round(PLAYER.t / T * 1000) : 0;
     if (PLAYER.recDraw) PLAYER.recDraw({ sim, s, sheet, face, t, tip, hits, hitTools, v, fs, showStop: slide === 0 && u < 0.8,

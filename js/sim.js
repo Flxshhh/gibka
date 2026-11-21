@@ -94,8 +94,8 @@
     for (let i = 1; i + 1 < cuts.length; i += 2) {
       if (cuts[i + 1] - cuts[i] >= keyWidth - 0.1) centers.push((cuts[i] + cuts[i + 1]) / 2);
     }
+    if (!centers.length) return null;
     centers.sort((a, b) => Math.abs(a - middle) - Math.abs(b - middle));
-    centers.push(middle);
     const profile = [
       { x: 0, y: 0 }, { x: adapterWidth, y: 0 }, { x: adapterWidth, y: adapterBase },
       ...G.arc({ x: 24.5, y: 20 }, 1, 0, -3 * Math.PI / 2, 10),
@@ -105,7 +105,6 @@
     ];
     // На каждом общем интервале по X обе границы линейны. Максимум
     // разности высот на его концах задаёт первый контакт без наложения.
-    let best;
     for (const center of centers) {
       const poly = G.translate(profile, center - 17, 0);
       let base = edges.length ? adapterBase - low : adapterBase + keyHeight;
@@ -122,9 +121,9 @@
           }
         }
       }
-      if (!best || base < best.base - 1e-7) best = { poly, base, seated: base + low <= adapterBase + 0.05 };
+      if (base + low <= adapterBase + 0.05) return { poly, base };
     }
-    return best;
+    return null;
   }
 
   function dieBase(die, machine) {
@@ -159,7 +158,6 @@
     const m = ctx.machine;
     const adapter = dieAdapter(ctx.die);
     this.dieBase = m.padH + (adapter?.base ?? 0);
-    this.dieAdapterUnseated = adapter?.seated === false;
     this.die = G.dieShape(ctx.die, this.dieBase);
     this.dieTop = this.die.top;
     this.adapter = adapter ? G.translate(adapter.poly, 0, m.padH) : [];
