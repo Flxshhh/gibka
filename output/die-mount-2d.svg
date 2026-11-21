@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 520" role="img" aria-labelledby="title">
+  <title id="title">Крепление матрицы — поперечное сечение</title>
+  <rect width="820" height="520" fill="#f8fafc"/>
+  <g transform="translate(-56 -936) scale(.55)" stroke="#34465a" stroke-width="3" stroke-linejoin="round">
+
+    <path fill="#e3b77b" d="M469 1830 H550 Q558 1830 565 1838 L604 1879 L650 1835 Q655 1830 662 1830 H740 V1885 L659 1960 Q653 1966 660 1974 L740 2046 V2101 H642 L604 2064 L566 2101 H468 V2080 L578 1976 Q591 1964 576 1950 L474 1857 Q469 1852 469 1845Z"/>
+    <path fill="#859bb4" d="M423 2191 V2062 Q423 2055 430 2055 H460 Q467 2055 467 2062 V2095 L464 2101 L470 2106 L474 2101 H734 L739 2106 L746 2100 L740 2094 V2063 Q740 2055 747 2055 H776 Q784 2055 784 2063 V2191Z"/>
+    <path fill="#bac5d2" d="M333 2191 H875 V2327 H740 V2528 Q696 2508 653 2524 Q570 2544 469 2499 V2327 H333Z"/>
+        <path d="M604 1815V2510" fill="none" stroke-dasharray="28 12 7 12" opacity=".55"/>
+  </g>
+  <g fill="none" stroke="#34465a" stroke-width="1.2">
+    <path d="M347 90H419 M365 206H419 M315 219L387 255H419 M356 269L393 290H419 M397 317H419"/>
+  </g>
+  <g font-family="Arial, sans-serif" fill="#172638">
+    <text x="32" y="42" font-size="26" font-weight="bold">Крепление матрицы</text>
+    <text x="430" y="95" font-size="16">Рабочий V-ручей</text>
+    <text x="430" y="211" font-size="16">Боковой бортик держателя</text>
+    <text x="430" y="260" font-size="16">Нижняя выемка матрицы</text>
+    <text x="430" y="295" font-size="16">Опорная полка держателя</text>
+    <text x="430" y="322" font-size="16">Стол пресса</text>
+    <text x="32" y="482" font-size="15">Матрица опирается нижними площадками на полку.</text>
+    <text x="32" y="504" font-size="15">Бортики ограничивают смещение поперёк оси гиба.</text>
+  </g>
+</svg>

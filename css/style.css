@@ -319,6 +319,7 @@ svg .dim-t { fill: var(--dim); }
 #simSvg { shape-rendering: geometricPrecision; cursor: zoom-in; }
 #simSvg .m-punch, #simSvg .m-die { fill: var(--sim-tool); stroke: var(--sim-tool-edge); stroke-width: .8; }
 #simSvg .m-tang, #simSvg .m-holder, #simSvg .m-beam, #simSvg .m-pad, #simSvg .m-table { fill: var(--sim-mach); stroke: var(--sim-mach-edge); stroke-width: .8; }
+#simSvg .m-jaw { fill: var(--sim-tool); stroke: var(--sim-mach-edge); stroke-width: .8; vector-effect: non-scaling-stroke; }
 #simSvg .sheet { fill: var(--sim-sheet); stroke: var(--sim-sheet-edge); stroke-width: 1.1; stroke-linejoin: round; }
 #simSvg .faceUp { stroke-width: 1.2; opacity: .9; }
 #simSvg .hit { stroke: var(--hit) !important; stroke-width: 1.4 !important; }

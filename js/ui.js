@@ -1500,7 +1500,7 @@
       c.x0 -= w2; c.x1 += w2;
       return c;
     }
-    let b = G.bounds(sim.die.poly);
+    let b = G.bounds(sim.die.poly.concat(sim.padSection, sim.mountSection(sim.tipOpen).flat()));
     b = G.bounds([{ x: -60, y: -30 }, { x: 60, y: -30 }], b);
     const done = [];
     plan.steps.forEach(s => {
@@ -1608,7 +1608,7 @@
     };
     const MF = '#c4cad2', ME = '#aeb4bb', TF = '#979da3', TE = '#7b8288', RED = '#ff3b30';
     poly(fr.sim.table, MF, hit('стол') ? RED : ME, hit('стол') ? 3 : 1.5);
-    poly(fr.sim.pad, MF, hit('подложка') ? RED : ME, hit('подложка') ? 3 : 1.5);
+    poly(fr.sim.padSection, MF, hit('подложка') ? RED : ME, hit('подложка') ? 3 : 1.5);
     poly(fr.sim.die.poly, TF, hit('матрица') ? RED : TE, hit('матрица') ? 3 : 1.5);
     g.strokeStyle = 'rgba(217,45,45,.45)'; g.lineWidth = 1; g.setLineDash([10, 5, 2, 5]); g.beginPath(); g.moveTo(X(0), ay); g.lineTo(X(0), ay + ah); g.stroke(); g.setLineDash([]);
     if (fr.showStop && fr.s.stop != null) {
@@ -1618,7 +1618,7 @@
       g.fillText('упор ' + fmt(fr.s.stop, 1), X(fr.s.stop + w / 2), Y(y - fr.fs * 0.5) + 4);
     }
     poly(fr.t.beam, MF, hit('балка') ? RED : ME, hit('балка') ? 3 : 1.5);
-    fr.t.holder.forEach(p => poly(p, MF, hit('зажим пуансона') ? RED : ME, hit('зажим пуансона') ? 3 : 1.5));
+    fr.sim.mountSection(fr.tip).forEach((p, i) => poly(p, i ? TF : MF, hit('зажим пуансона') ? RED : ME, hit('зажим пуансона') ? 3 : 1.5));
     poly(fr.t.tang, MF, ME, 1.5);
     poly(fr.t.punch, TF, hit('пуансон') ? RED : TE, hit('пуансон') ? 3 : 1.5);
     poly(fr.sheet, '#ffffff', fr.hits.length ? RED : '#2f3437', 2.2);
@@ -1930,14 +1930,14 @@
       gaugeOffset = (beforeApproach - s.stop) * (1 - ease((loading - 0.75) / 0.25));
     }
     if (!(PLAYER.d3 && draw3d(sim, s, pl, sheet, tip, hits, k, transferProgress, gaugeOffset))) {
-      let h = SV.path(sim.table, 'm-table' + cls('стол')) + SV.path(sim.pad, 'm-pad' + cls('подложка')) +
+      let h = SV.path(sim.table, 'm-table' + cls('стол')) + SV.path(sim.padSection, 'm-pad' + cls('подложка')) +
         SV.path(sim.die.poly, 'm-die' + cls('матрица')) + SV.line({ x: 0, y: v.y0 }, { x: 0, y: v.y1 }, 'axis');
       if (s.stop != null && slide === 0 && u < 0.8) {
         const y = sim.dieTop;
         h += SV.path(G.rect(s.stop, y - fs * 0.4, s.stop + fs * 0.45, y + ST.part.S + fs * 1.2), 'gauge');
         h += SV.text({ x: s.stop + fs * 0.25, y: y - fs * 0.9 }, 'упор ' + fmt(s.stop, 1), fs * 0.6, 'lbl-s');
       }
-      h += SV.path(t.beam, 'm-beam' + cls('балка')) + t.holder.map(p => SV.path(p, 'm-holder' + cls('зажим пуансона'))).join('') +
+      h += SV.path(t.beam, 'm-beam' + cls('балка')) + sim.mountSection(tip).map((p, i) => SV.path(p, (i ? 'm-jaw' : 'm-holder') + cls('зажим пуансона'))).join('') +
         SV.path(t.tang, 'm-tang') + SV.path(t.punch, 'm-punch' + cls('пуансон')) +
         SV.path(sheet, 'sheet' + (hits.length ? ' hit' : '')) + SV.path(face, 'faceUp', false);
       hits.forEach(x => x.hits.forEach(p => { h += SV.circle(p, fs * 0.35, 'hitpt'); }));
@@ -1950,7 +1950,7 @@
       '<div>' + s.notes.map(esc).concat(['к упору ' + s.backEdge]).concat(s.stop != null ? ['упор ' + fmt(s.stop, 1) + ' мм'] : []).join(' · ') + '</div>' +
       (hits.length ? '<div class="bad">Столкновение: ' + uniq(hitTools).join(', ') + '</div>' : '');
     if (slider && document.activeElement !== slider) slider.value = T ? Math.round(PLAYER.t / T * 1000) : 0;
-    if (PLAYER.recDraw) PLAYER.recDraw({ sim, s, sheet, face, t, hits, hitTools, v, fs, showStop: slide === 0 && u < 0.8,
+    if (PLAYER.recDraw) PLAYER.recDraw({ sim, s, sheet, face, t, tip, hits, hitTools, v, fs, showStop: slide === 0 && u < 0.8,
       title: 'Шаг ' + (k + 1) + ' из ' + n + ' · Гиб Г' + (s.bend + 1) + ' на ' + fmt(b.incl, 0) + '° · ' + phase,
       sub: s.notes.concat(['к упору ' + s.backEdge]).concat(s.stop != null ? ['упор ' + fmt(s.stop, 1) + ' мм'] : []).join(' · ') });
   }
