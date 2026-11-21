@@ -1823,11 +1823,9 @@
     const contact0 = sim.place(sim.fracs(done, s.bend, 0), s.bend, s.mirror).tipY;
     const contact1 = sim.place(sim.fracs(done, s.bend, 1), s.bend, s.mirror).tipY;
     const open = Math.max(PLAYER.openY || sim.tipOpen, contact0 + 5);
-    const bendStart = PLAYER.d3 ? 0.45 : 0.35;
     if (u < 0.15) { phase = 'Укладка листа'; slide = 1 - ease(u / 0.15); tip = open; }
     else if (u < 0.35) { phase = 'Подвод пуансона'; tip = open + (contact0 - open) * ease((u - 0.15) / 0.2); }
-    else if (u < bendStart) { phase = 'Отвод задних упоров'; tip = contact0; }
-    else if (u < 0.8) { phase = 'Гибка'; f = ease((u - bendStart) / (0.8 - bendStart)); tip = null; }
+    else if (u < 0.8) { phase = 'Гибка'; f = ease((u - 0.35) / 0.45); tip = null; }
     else { phase = 'Возврат'; f = 1; tip = contact1 + (open - contact1) * ease((u - 0.8) / 0.2); }
     const pl = sim.place(sim.fracs(done, s.bend, f), s.bend, s.mirror);
     if (tip == null) tip = pl.tipY;
@@ -1848,10 +1846,14 @@
     const fs = (v.y1 - v.y0) / 32;
 
     const transferProgress = k > 0 && u < 0.15 ? u / 0.15 : null;
-    let gaugeOffset = GAUGE_RETREAT * ease((u - 0.35) / 0.1);
-    if (transferProgress != null && s.stop != null) {
-      const previousStop = plan.steps[k - 1].stop ?? s.stop;
-      gaugeOffset = (previousStop + GAUGE_RETREAT - s.stop) * (1 - ease((transferProgress - 0.3) / 0.7));
+    let gaugeOffset = GAUGE_RETREAT * ease((u - 0.8) / 0.1);
+    if (u < 0.15 && s.stop != null) {
+      const loading = u / 0.15;
+      const previousStop = k > 0 ? plan.steps[k - 1].stop ?? s.stop : s.stop;
+      const parked = Math.max(previousStop, s.stop) + GAUGE_RETREAT;
+      const start = previousStop + GAUGE_RETREAT;
+      const beforeApproach = start + (parked - start) * ease(loading / 0.2);
+      gaugeOffset = (beforeApproach - s.stop) * (1 - ease((loading - 0.75) / 0.25));
     }
     if (!(PLAYER.d3 && draw3d(sim, s, pl, sheet, tip, hits, k, transferProgress, gaugeOffset))) {
       let h = SV.path(sim.table, 'm-table' + cls('стол')) + SV.path(sim.pad, 'm-pad' + cls('подложка')) +
