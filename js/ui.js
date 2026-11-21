@@ -1788,7 +1788,7 @@
 
   function flybyRadius(v, bounds, amount) {
     // Начинаем у ближнего торца и обходим пресс со стороны подачи листа (X < 0).
-    v.theta = -0.28 - 0.88 * amount;
+    v.theta = -0.015 - 1.145 * amount;
     v.phi = Math.PI / 2 - 0.10 - 0.08 * amount;
     bounds.getCenter(v.target);
     const right = new THREE.Vector3(Math.cos(v.theta), 0, -Math.sin(v.theta));
@@ -1808,14 +1808,15 @@
     return radius;
   }
 
-  function frameFlyby(v, flyby, amount, dieTop) {
-    flyby.startRadius ??= flybyRadius(v, flyby.bounds, 0);
-    const radius = flybyRadius(v, flyby.bounds, amount);
-    // Начальный кадр шире и центрирован ближе к зоне гиба.
-    const delta = radius - flyby.startRadius;
-    const opening = (1 - amount) ** 2;
-    v.radius = (flyby.startRadius + (delta > 0 ? delta * 0.5 : delta)) / 1.5 * (1 + 0.08 * opening);
-    v.target.y -= Math.max(0, v.target.y - dieTop) * 0.45 * opening;
+  function frameFlyby(v, flyby, progress, sim, toolLength) {
+    // Одна дуга туда и обратно за всю запись, с плавным разворотом в середине.
+    const arc = (1 - Math.cos(2 * Math.PI * progress)) / 2;
+    const sideRadius = flybyRadius(v, flyby.bounds, arc);
+    const height = Math.max(190, Math.min(320, sim.die.W * 6));
+    const endRadius = height / (2 * Math.tan(G.deg(v.camera.fov / 2)));
+    // В торцевом кадре смотрим на ближнее сечение и держим ручей ниже центра.
+    v.target.lerp(new THREE.Vector3(4, sim.dieTop + height * 0.22, toolLength / 2), 1 - arc);
+    v.radius = endRadius * (1 - arc) + sideRadius * 0.8 * arc;
   }
 
   function draw3d(sim, s, pl, sheet, tip, hits, k, transferProgress, gaugeOffset) {
@@ -1891,7 +1892,7 @@
     const flyby = REC.flyby;
     if (flyby && flyby.input === v.cameraInput) {
       flyby.bounds ||= recordingBounds(sim, L, Lt);
-      frameFlyby(v, flyby, ease(PLAYER.t / PLAYER.total()), sim.dieTop);
+      frameFlyby(v, flyby, PLAYER.t / PLAYER.total(), sim, Lt);
     }
     v.render();
     return true;
