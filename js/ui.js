@@ -1767,6 +1767,7 @@
     const done = [];
     for (const step of PLAYER.plan.steps) {
       const flat = sim.place(sim.fracs(done, step.bend, 0), step.bend, step.mirror);
+      if (!done.length) add(G.translate(flat.poly, -120, 0), length);
       const open = Math.max(PLAYER.openY || sim.tipOpen, flat.tipY + 5);
       add(G.translate(sim.punchLocal.concat(sim.tangLocal), 0, open), toolLength);
       for (const f of [0, 0.25, 0.5, 0.75, 1]) {
@@ -1780,8 +1781,9 @@
   }
 
   function frameFlyby(v, bounds, amount) {
-    v.theta = -Math.PI / 2 + 0.32 * (1 - amount);
-    v.phi = Math.PI / 2 - 0.24 + 0.12 * amount;
+    // Начинаем у ближнего торца и обходим пресс со стороны подачи листа (X < 0).
+    v.theta = -0.28 - 0.88 * amount;
+    v.phi = Math.PI / 2 - 0.10 - 0.08 * amount;
     bounds.getCenter(v.target);
     const right = new THREE.Vector3(Math.cos(v.theta), 0, -Math.sin(v.theta));
     const depth = new THREE.Vector3().setFromSphericalCoords(1, v.phi, v.theta);
