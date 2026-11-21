@@ -1535,9 +1535,12 @@
     if (!on) { drawFrame(); return; }
     if (!sim3d && typeof THREE === 'undefined') $('#sim3d').innerHTML = '<p class="muted pad">Загружаю 3D…</p>';
     ensureThree(() => {
-      if (!sim3d) { $('#sim3d').innerHTML = ''; sim3d = new LG.View3D($('#sim3d')); sim3d.theta = -1.15; sim3d.phi = 1.24; }
+      if (!PLAYER.d3) return;
+      if (!sim3d) { $('#sim3d').innerHTML = ''; sim3d = new LG.View3D($('#sim3d')); }
       if (!sim3d.ok) { sim3d = null; set3d(false); toast('3D недоступно: не загрузилась библиотека (нужен интернет)', 4000); return; }   // возвращаем плоский вид
       sim3d.key = null;
+      sim3d.theta = -Math.PI / 2;
+      sim3d.phi = Math.PI / 2;
       drawFrame();
       if (then) then();
     });
@@ -1668,7 +1671,7 @@
       const is3d = mode === '3d', clearFlyby = () => { REC.flyby = null; };
       REC.mode = mode;
       PLAYER.pause(); PLAYER.t = 0;
-      REC.flyby = is3d ? { theta: sim3d.theta, radius: sim3d.radius, input: sim3d.cameraInput } : null;
+      REC.flyby = is3d && sim3d.cameraInput === REC.countdownCameraInput ? { input: sim3d.cameraInput } : null;
       PLAYER.recDraw = is3d ? recFrame3d : recFrame2d; drawFrame();
       let rec;
       try { rec = new MediaRecorder(REC.canvas.captureStream(30), mime ? { mimeType: mime, videoBitsPerSecond: 5e6 } : undefined); }
@@ -1696,6 +1699,7 @@
         toast('Этот браузер не умеет записывать видео — воспользуйтесь записью экрана телефона', 5000); return;
       }
       PLAYER.pause(); PLAYER.t = 0; drawFrame();
+      if (mode === '3d') REC.countdownCameraInput = sim3d.cameraInput;
       const btn = $('#recBtn'); btn.innerHTML = ic('x') + 'Отмена'; btn.classList.add('rec');
       let ov = $('#recCount');
       if (!ov) { ov = document.createElement('div'); ov.id = 'recCount'; ov.className = 'rec-count'; $('.sim-wrap').appendChild(ov); }
@@ -1735,6 +1739,67 @@
 
   const GAUGE_RETREAT = 35;
 
+  function gaugeClearance(sim, step, done) {
+    if (step.stop == null) return 0;
+    const bottom = sim.dieTop - 9, top = sim.dieTop + 22;
+    let right = step.stop;
+    for (let i = 1; i <= 32; i++) {
+      const poly = sim.place(sim.fracs(done, step.bend, i / 32), step.bend, step.mirror).poly;
+      poly.forEach((p, j) => {
+        if (p.y >= bottom && p.y <= top) right = Math.max(right, p.x);
+        const q = poly[(j + 1) % poly.length];
+        for (const y of [bottom, top]) {
+          if ((p.y < y) !== (q.y < y)) right = Math.max(right, p.x + (q.x - p.x) * (y - p.y) / (q.y - p.y));
+        }
+      });
+    }
+    return right > step.stop + 0.5 ? Math.max(GAUGE_RETREAT, right - step.stop + 5) : 0;
+  }
+
+  function recordingBounds(sim, length, toolLength) {
+    const bounds = new THREE.Box3();
+    const add = (points, depth) => {
+      for (const p of points) {
+        bounds.expandByPoint(new THREE.Vector3(p.x, p.y, -depth / 2));
+        bounds.expandByPoint(new THREE.Vector3(p.x, p.y, depth / 2));
+      }
+    };
+    const done = [];
+    for (const step of PLAYER.plan.steps) {
+      const flat = sim.place(sim.fracs(done, step.bend, 0), step.bend, step.mirror);
+      const open = Math.max(PLAYER.openY || sim.tipOpen, flat.tipY + 5);
+      add(G.translate(sim.punchLocal.concat(sim.tangLocal), 0, open), toolLength);
+      for (const f of [0, 0.25, 0.5, 0.75, 1]) {
+        const pose = sim.place(sim.fracs(done, step.bend, f), step.bend, step.mirror);
+        add(pose.poly, length);
+        add(G.translate(sim.punchLocal, 0, pose.tipY), toolLength);
+      }
+      done.push(step.bend);
+    }
+    return bounds;
+  }
+
+  function frameFlyby(v, bounds, amount) {
+    v.theta = -Math.PI / 2 + 0.32 * (1 - amount);
+    v.phi = Math.PI / 2 - 0.24 + 0.12 * amount;
+    bounds.getCenter(v.target);
+    const right = new THREE.Vector3(Math.cos(v.theta), 0, -Math.sin(v.theta));
+    const depth = new THREE.Vector3().setFromSphericalCoords(1, v.phi, v.theta);
+    const up = depth.clone().cross(right);
+    const vertical = Math.tan(G.deg(v.camera.fov / 2)) * (0.82 + 0.12 * amount);
+    const horizontal = vertical * v.camera.aspect;
+    let radius = 50;
+    for (const x of [bounds.min.x, bounds.max.x]) {
+      for (const y of [bounds.min.y, bounds.max.y]) {
+        for (const z of [bounds.min.z, bounds.max.z]) {
+          const p = new THREE.Vector3(x, y, z).sub(v.target);
+          radius = Math.max(radius, p.dot(depth) + Math.max(Math.abs(p.dot(up)) / vertical, Math.abs(p.dot(right)) / horizontal));
+        }
+      }
+    }
+    v.radius = radius;
+  }
+
   function draw3d(sim, s, pl, sheet, tip, hits, k, transferProgress, gaugeOffset) {
     const v = sim3d;
     if (!v || !v.ok) return false;
@@ -1745,7 +1810,7 @@
       v.key = PLAYER.key;
       v.scene.background = new THREE.Color(0xebedf0);
       v.setMetalLighting();
-      const TOOL = { color: 0xd2d8df, edges: true, edgeColor: 0x747f89, metal: 0.88, roughness: 0.24 };
+      const TOOL = { color: 0xf0f1f2, edges: true, edgeColor: 0x91979d, metal: 0.52, roughness: 0.27 };
       const FRAME = { color: 0x62717b, edges: true, edgeColor: 0x47545e, metal: 0.58, roughness: 0.37 };
       v.setPart('table', G.rect(-70, -40, 70, 0), Lt * 1.12, { color: 0xa1a7a8, metal: 0 });
       v.setPart('pad', sim.pad, Lt, TOOL);
@@ -1757,8 +1822,10 @@
       v.setPart('beam', G.rect(sim.tangCx - 45, holderTop, sim.tangCx + 45, holderTop + 65), Lt * 1.1, FRAME);
       moving.forEach(n => { v.parts[n].position.y = PLAYER.openY || sim.tipOpen; });
       v.setPart('sheet', sheet, L, { color: 0x1565c0, metal: 0.1 });
-      const railX = Math.max(dieBounds.x1 + 35, ...PLAYER.plan.steps.map(step => (step.stop || 0) + 45));
-      v.setPart('gaugeRail', G.rect(railX, sim.dieTop - 30, railX + 24, sim.dieTop - 12), Lt, { color: 0xa1a7a8, metal: 0 });
+      const stops = PLAYER.plan.steps.map(step => step.stop).filter(stop => stop != null);
+      v.gaugeOrigin = stops.length ? Math.min(...stops) : dieBounds.x1;
+      const railX = Math.max(dieBounds.x1 + 35, v.gaugeOrigin + 45);
+      v.setPart('gaugeRail', G.rect(railX, sim.dieTop - 30, railX + 24, sim.dieTop - 9), Lt, { color: 0xa1a7a8, metal: 0 });
       v.gaugeRailX = railX;
       v.gaugeStop = undefined;
       // размерная линия длины гиба — перед матрицей, со стороны оператора
@@ -1771,7 +1838,7 @@
     }
     moving.forEach(n => { v.parts[n].position.y = tip; });
     const transferring = transferProgress != null;
-    const mesh = v.setPart('sheet', transferring ? pl.poly : sheet, L, { color: hits.length ? 0xff3b30 : 0x758b9f, metal: hits.length ? 0.18 : 0.79, roughness: 0.32, edges: true, edgeColor: hits.length ? 0x8a0f0a : 0x334252 });
+    const mesh = v.setPart('sheet', transferring ? pl.poly : sheet, L, { color: hits.length ? 0xff3b30 : 0x34495c, metal: hits.length ? 0.18 : 0.43, roughness: 0.38, edges: true, edgeColor: hits.length ? 0x8a0f0a : 0x1d2935 });
     mesh.position.set(0, 0, 0);
     mesh.quaternion.identity();
     if (transferring) {
@@ -1783,22 +1850,22 @@
     const stop = s.stop;
     if (v.gaugeStop !== stop) {
       v.gaugeStop = stop;
-      const y = sim.dieTop, railX = v.gaugeRailX;
-      const finger = stop == null ? null : [{ x: stop, y: y - 9 }, { x: railX + 15, y: y - 9 },
-        { x: railX + 15, y: y + 22 }, { x: stop + 16, y: y + 22 },
-        { x: stop + 16, y: y + 7 }, { x: stop, y: y + 7 }];
+      const y = sim.dieTop, railX = v.gaugeRailX, x = v.gaugeOrigin;
+      const finger = stop == null ? null : [{ x, y: y - 9 }, { x: railX + 15, y: y - 9 },
+        { x: railX + 15, y: y + 22 }, { x: x + 16, y: y + 22 },
+        { x: x + 16, y: y + 7 }, { x, y: y + 7 }];
       for (const side of [-1, 1]) {
         const part = v.setPart('gauge' + side, finger, Math.min(42, L * 0.22), { color: 0x434743, edges: true, edgeColor: 0x30332f, metal: 0 });
         part.position.z = side * L * 0.22;
       }
     }
-    for (const side of [-1, 1]) v.parts['gauge' + side].position.x = gaugeOffset;
+    const gaugeX = (stop ?? v.gaugeOrigin) - v.gaugeOrigin + gaugeOffset;
+    v.parts.gaugeRail.position.x = gaugeX;
+    for (const side of [-1, 1]) v.parts['gauge' + side].position.x = gaugeX;
     const flyby = REC.flyby;
     if (flyby && flyby.input === v.cameraInput) {
-      const amount = ease(PLAYER.t / PLAYER.total());
-      const towardFront = Math.atan2(Math.sin(-Math.PI / 2 - flyby.theta), Math.cos(-Math.PI / 2 - flyby.theta));
-      v.theta = flyby.theta + Math.max(-0.55, Math.min(0.55, towardFront)) * amount;
-      v.radius = flyby.radius * (1 - 0.12 * amount);
+      flyby.bounds ||= recordingBounds(sim, L, Lt);
+      frameFlyby(v, flyby.bounds, ease(PLAYER.t / PLAYER.total()));
     }
     v.render();
     return true;
@@ -1819,13 +1886,16 @@
     const u = PLAYER.d3 && k > 0 ? (progress < 0.32 ? progress * 0.15 / 0.32 : 0.15 + (progress - 0.32) * 0.85 / 0.68) : progress;
     const s = plan.steps[k];
     const done = plan.steps.slice(0, k).map(x => x.bend);
+    const clearance = PLAYER.d3 ? (s.gaugeClearance ??= gaugeClearance(sim, s, done)) : 0;
+    const bendStart = clearance ? 0.45 : 0.35;
     let f = 0, tip, slide = 0, phase;
     const contact0 = sim.place(sim.fracs(done, s.bend, 0), s.bend, s.mirror).tipY;
     const contact1 = sim.place(sim.fracs(done, s.bend, 1), s.bend, s.mirror).tipY;
     const open = Math.max(PLAYER.openY || sim.tipOpen, contact0 + 5);
     if (u < 0.15) { phase = 'Укладка листа'; slide = 1 - ease(u / 0.15); tip = open; }
     else if (u < 0.35) { phase = 'Подвод пуансона'; tip = open + (contact0 - open) * ease((u - 0.15) / 0.2); }
-    else if (u < 0.8) { phase = 'Гибка'; f = ease((u - 0.35) / 0.45); tip = null; }
+    else if (u < bendStart) { phase = 'Отвод задних упоров'; tip = contact0; }
+    else if (u < 0.8) { phase = 'Гибка'; f = ease((u - bendStart) / (0.8 - bendStart)); tip = null; }
     else { phase = 'Возврат'; f = 1; tip = contact1 + (open - contact1) * ease((u - 0.8) / 0.2); }
     const pl = sim.place(sim.fracs(done, s.bend, f), s.bend, s.mirror);
     if (tip == null) tip = pl.tipY;
@@ -1846,12 +1916,17 @@
     const fs = (v.y1 - v.y0) / 32;
 
     const transferProgress = k > 0 && u < 0.15 ? u / 0.15 : null;
-    let gaugeOffset = GAUGE_RETREAT * ease((u - 0.8) / 0.1);
+    let gaugeOffset = clearance
+      ? clearance * ease((u - 0.35) / (bendStart - 0.35))
+      : GAUGE_RETREAT * ease((u - 0.8) / 0.1);
     if (u < 0.15 && s.stop != null) {
       const loading = u / 0.15;
       const previousStop = k > 0 ? plan.steps[k - 1].stop ?? s.stop : s.stop;
-      const parked = Math.max(previousStop, s.stop) + GAUGE_RETREAT;
-      const start = previousStop + GAUGE_RETREAT;
+      const previous = plan.steps[k - 1];
+      const previousClearance = PLAYER.d3 && previous
+        ? (previous.gaugeClearance ??= gaugeClearance(sim, previous, done.slice(0, -1))) : 0;
+      const start = previousStop + Math.max(previousClearance, GAUGE_RETREAT);
+      const parked = Math.max(start, s.stop + GAUGE_RETREAT);
       const beforeApproach = start + (parked - start) * ease(loading / 0.2);
       gaugeOffset = (beforeApproach - s.stop) * (1 - ease((loading - 0.75) / 0.25));
     }
