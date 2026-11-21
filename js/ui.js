@@ -1788,7 +1788,7 @@
 
   function flybyRadius(v, bounds, amount) {
     // Начинаем у ближнего торца и обходим пресс со стороны подачи листа (X < 0).
-    v.theta = -0.015 - 1.145 * amount;
+    v.theta = -0.015 - G.deg(30) * amount;
     v.phi = Math.PI / 2 - 0.10 - 0.08 * amount;
     bounds.getCenter(v.target);
     const right = new THREE.Vector3(Math.cos(v.theta), 0, -Math.sin(v.theta));
