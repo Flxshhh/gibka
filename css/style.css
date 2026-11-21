@@ -299,7 +299,7 @@ svg .sheet.hit { stroke: var(--hit); }
 svg .faceA { fill: none; stroke: var(--face); stroke-width: 2.5; vector-effect: non-scaling-stroke; }
 svg .faceUp { fill: none; stroke: var(--face); stroke-width: 3; vector-effect: non-scaling-stroke; }
 svg .m-punch, svg .m-die { fill: var(--tool-fill); stroke: var(--tool-edge); stroke-width: 1.75; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
-svg .m-tang, svg .m-holder, svg .m-beam, svg .m-pad, svg .m-table { fill: var(--machine-fill); stroke: var(--machine); stroke-width: 1.2; vector-effect: non-scaling-stroke; }
+svg .m-jaw, svg .m-holder, svg .m-beam, svg .m-pad, svg .m-table { fill: var(--machine-fill); stroke: var(--machine); stroke-width: 1.2; vector-effect: non-scaling-stroke; }
 svg .hit { stroke: var(--hit) !important; stroke-width: 2.5 !important; }
 svg .hitpt { fill: var(--hit); stroke: #fff; stroke-width: 1; vector-effect: non-scaling-stroke; }
 svg .gauge { fill: var(--good); opacity: .85; }
@@ -318,8 +318,7 @@ svg .dim-t { fill: var(--dim); }
 .sim-wrap { position: relative; }
 #simSvg { shape-rendering: geometricPrecision; cursor: zoom-in; }
 #simSvg .m-punch, #simSvg .m-die { fill: var(--sim-tool); stroke: var(--sim-tool-edge); stroke-width: .8; }
-#simSvg .m-tang, #simSvg .m-holder, #simSvg .m-beam, #simSvg .m-pad, #simSvg .m-table { fill: var(--sim-mach); stroke: var(--sim-mach-edge); stroke-width: .8; }
-#simSvg .m-jaw { fill: var(--sim-tool); stroke: var(--sim-mach-edge); stroke-width: .8; vector-effect: non-scaling-stroke; }
+#simSvg .m-jaw, #simSvg .m-holder, #simSvg .m-beam, #simSvg .m-pad, #simSvg .m-table { fill: var(--sim-mach); stroke: var(--sim-mach-edge); stroke-width: .8; }
 #simSvg .sheet { fill: var(--sim-sheet); stroke: var(--sim-sheet-edge); stroke-width: 1.1; stroke-linejoin: round; }
 #simSvg .faceUp { stroke-width: 1.2; opacity: .9; }
 #simSvg .hit { stroke: var(--hit) !important; stroke-width: 1.4 !important; }
