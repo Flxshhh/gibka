@@ -3,6 +3,52 @@
 (function () {
   const G = LG.G;
 
+  function holderShape(ps, machine, mirror, height) {
+    if (height <= 0) return [];
+    const outline = ps.tang.length ? ps.tang : ps.outline;
+    // У DXF плечико может быть на доли миллиметра выше номинальной Hb.
+    const base = ps.H + (ps.custom ? 0.1 : 0);
+    const top = ps.H + height;
+    if (top <= base) return [];
+    const highest = outline.reduce((i, p, j) => p.y > outline[i].y ? j : i, 0);
+    const peak = outline[highest];
+    if (peak.y <= base) return [G.rect(ps.tangCx - machine.holderW / 2, base, ps.tangCx + machine.holderW / 2, top)]
+      .map(poly => mirror ? G.mirrorX(poly) : poly);
+
+    const atY = (a, b, y) => ({ x: a.x + (b.x - a.x) * (y - a.y) / (b.y - a.y), y });
+    const side = direction => {
+      const points = [peak];
+      for (let i = 1; i < outline.length; i++) {
+        const p = outline[(highest + direction * i + outline.length) % outline.length];
+        if (p.y <= base) {
+          points.push(atY(points[points.length - 1], p, base));
+          break;
+        }
+        points.push(p);
+      }
+      return points.reverse();
+    };
+    const sides = [side(1), side(-1)].sort((a, b) => a[0].x - b[0].x);
+    const [left, right] = sides;
+    const bounds = G.bounds(left.concat(right));
+    const x0 = Math.min(ps.tangCx - machine.holderW / 2, bounds.x0 - 1);
+    const x1 = Math.max(ps.tangCx + machine.holderW / 2, bounds.x1 + 1);
+    let parts;
+    if (top > peak.y) {
+      parts = [[{ x: x0, y: base }, ...left, ...right.slice(0, -1).reverse(),
+        { x: x1, y: base }, { x: x1, y: top }, { x: x0, y: top }]];
+    } else {
+      // Низкий зажим заканчивается до верха хвостовика, поэтому губки раздельные.
+      parts = sides.map((points, i) => {
+        const end = points.findIndex(p => p.y >= top);
+        const edge = atY(points[end - 1], points[end], top);
+        const x = i === 0 ? x0 : x1;
+        return [{ x, y: base }, ...points.slice(0, end), edge, { x, y: top }];
+      });
+    }
+    return mirror ? parts.map(G.mirrorX) : parts;
+  }
+
   // ctx: { an, S, Ri, punch (параметры), punchMirror, die (параметры), machine }
   function Sim(ctx) {
     this.ctx = ctx;
@@ -18,8 +64,8 @@
     this.punchInfo = ps;
     this.tangLocal = ctx.punchMirror ? G.mirrorX(ps.tang) : ps.tang;
     this.tangCx = ctx.punchMirror ? -ps.tangCx : ps.tangCx;   // зажим держит хвостовик
-    const tang = this.tangLocal.length ? this.tangLocal : this.punchLocal.filter(p => p.y > ps.H + 0.01);
-    this.holderX = tang.length ? G.bounds(tang).x1 : this.tangCx + G.PUNCH_FIX.TW / 2;
+    this.holderLocal = holderShape(ps, m, ctx.punchMirror, m.holderH);
+    this.holderView = m.holderH > 70 ? holderShape(ps, m, ctx.punchMirror, 70) : this.holderLocal;
     // Положение носика при полностью открытом прессе
     this.tipOpen = m.D - m.holderH - ps.H;
     this.nb = ctx.an.bends.length;
@@ -65,7 +111,7 @@
     return {
       punch: G.translate(this.punchLocal, 0, tipY),
       tang: G.translate(this.tangLocal, 0, tipY),
-      holder: G.rect(this.holderX, hy, this.holderX + m.holderW, hy + m.holderH),
+      holder: this.holderLocal.map(poly => G.translate(poly, 0, tipY)),
       beam: G.rect(this.tangCx - 45, hy + m.holderH, this.tangCx + 45, hy + m.holderH + 600)
     };
   };
@@ -81,7 +127,7 @@
     const res = [];
     const add = (name, hits) => { if (hits.length) res.push({ tool: name, hits }); };
     add('пуансон', G.polyHits(pl.poly, t.punch, nearTip));
-    add('зажим пуансона', G.polyHits(pl.poly, t.holder));
+    add('зажим пуансона', t.holder.flatMap(poly => G.polyHits(pl.poly, poly)));
     add('балка', G.polyHits(pl.poly, t.beam));
     add('матрица', G.polyHits(pl.poly, this.die.poly, nearShoulder));
     add('подложка', G.polyHits(pl.poly, this.pad));

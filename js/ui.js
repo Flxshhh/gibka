@@ -1213,7 +1213,7 @@
     const w = b.x1 - b.x0, hgt = b.y1 - b.y0, m = Math.max(w, hgt) * 0.04 + 2, fs = Math.max(w, hgt) / 16;
     const vb = SV.viewBox({ x0: b.x0 - m, x1: b.x1 + m, y0: b.y0 - m, y1: b.y1 + m }, 0);
     const pic = (pl, t, label, gauge) => {
-      let h = SV.path(sim.pad, 'ps-mach') + SV.path(sim.die.poly, 'ps-tool') + SV.path(t.holder, 'ps-mach') + SV.path(t.tang, 'ps-mach') + SV.path(t.punch, 'ps-tool') +
+      let h = SV.path(sim.pad, 'ps-mach') + SV.path(sim.die.poly, 'ps-tool') + t.holder.map(p => SV.path(p, 'ps-mach')).join('') + SV.path(t.tang, 'ps-mach') + SV.path(t.punch, 'ps-tool') +
         SV.path(pl.poly, 'ps-sheet') + SV.path(s.face === 'A' ? pl.A : pl.B, 'ps-face', false);
       if (gauge && s.stop != null) {
         h += SV.path(G.rect(s.stop, sim.dieTop - fs * 0.25, s.stop + fs * 0.4, sim.dieTop + S + fs * 0.9), 'ps-gauge');
@@ -1622,7 +1622,7 @@
       g.fillText('упор ' + fmt(fr.s.stop, 1), X(fr.s.stop + w / 2), Y(y - fr.fs * 0.5) + 4);
     }
     poly(fr.t.beam, MF, hit('балка') ? RED : ME, hit('балка') ? 3 : 1.5);
-    poly(fr.t.holder, MF, hit('зажим пуансона') ? RED : ME, hit('зажим пуансона') ? 3 : 1.5);
+    fr.t.holder.forEach(p => poly(p, MF, hit('зажим пуансона') ? RED : ME, hit('зажим пуансона') ? 3 : 1.5));
     poly(fr.t.tang, MF, ME, 1.5);
     poly(fr.t.punch, TF, hit('пуансон') ? RED : TE, hit('пуансон') ? 3 : 1.5);
     poly(fr.sheet, '#ffffff', fr.hits.length ? RED : '#2f3437', 2.2);
@@ -1806,7 +1806,8 @@
     const v = sim3d;
     if (!v || !v.ok) return false;
     const L = Math.max(50, Math.min(4000, +ST.part.L || 1000)), Lt = L * 1.08, m = ST.machine, H = sim.punchInfo.H;
-    const moving = ['punch', 'tang', 'holder', 'beam'];
+    const holders = sim.holderView.map((_, i) => 'holder' + i);
+    const moving = ['punch', 'tang', 'beam', ...holders];
     const dieBounds = G.bounds(sim.die.poly);
     if (v.key !== PLAYER.key) {
       v.key = PLAYER.key;
@@ -1820,7 +1821,7 @@
       v.setPart('punch', sim.punchLocal, Lt, TOOL);
       v.setPart('tang', sim.tangLocal, Lt, TOOL);
       const holderTop = H + Math.min(m.holderH, 70);
-      v.setPart('holder', G.rect(sim.holderX, H, sim.holderX + m.holderW, holderTop), Lt, FRAME);
+      for (let i = 0; i < 2; i++) v.setPart('holder' + i, sim.holderView[i], Lt, FRAME);
       v.setPart('beam', G.rect(sim.tangCx - 45, holderTop, sim.tangCx + 45, holderTop + 65), Lt * 1.1, FRAME);
       moving.forEach(n => { v.parts[n].position.y = PLAYER.openY || sim.tipOpen; });
       v.setPart('sheet', sheet, L, { color: 0x1565c0, metal: 0.1 });
@@ -1940,7 +1941,7 @@
         h += SV.path(G.rect(s.stop, y - fs * 0.4, s.stop + fs * 0.45, y + ST.part.S + fs * 1.2), 'gauge');
         h += SV.text({ x: s.stop + fs * 0.25, y: y - fs * 0.9 }, 'упор ' + fmt(s.stop, 1), fs * 0.6, 'lbl-s');
       }
-      h += SV.path(t.beam, 'm-beam' + cls('балка')) + SV.path(t.holder, 'm-holder' + cls('зажим пуансона')) +
+      h += SV.path(t.beam, 'm-beam' + cls('балка')) + t.holder.map(p => SV.path(p, 'm-holder' + cls('зажим пуансона'))).join('') +
         SV.path(t.tang, 'm-tang') + SV.path(t.punch, 'm-punch' + cls('пуансон')) +
         SV.path(sheet, 'sheet' + (hits.length ? ' hit' : '')) + SV.path(face, 'faceUp', false);
       hits.forEach(x => x.hits.forEach(p => { h += SV.circle(p, fs * 0.35, 'hitpt'); }));
