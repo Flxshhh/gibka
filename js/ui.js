@@ -1808,12 +1808,14 @@
     return radius;
   }
 
-  function frameFlyby(v, flyby, amount) {
+  function frameFlyby(v, flyby, amount, dieTop) {
     flyby.startRadius ??= flybyRadius(v, flyby.bounds, 0);
     const radius = flybyRadius(v, flyby.bounds, amount);
-    // Первый кадр расположен в 1,5 раза ближе; последующее отдаление вдвое мягче.
+    // Начальный кадр шире и центрирован ближе к зоне гиба.
     const delta = radius - flyby.startRadius;
-    v.radius = (flyby.startRadius + (delta > 0 ? delta * 0.5 : delta)) / 1.5;
+    const opening = (1 - amount) ** 2;
+    v.radius = (flyby.startRadius + (delta > 0 ? delta * 0.5 : delta)) / 1.5 * (1 + 0.08 * opening);
+    v.target.y -= Math.max(0, v.target.y - dieTop) * 0.45 * opening;
   }
 
   function draw3d(sim, s, pl, sheet, tip, hits, k, transferProgress, gaugeOffset) {
@@ -1889,7 +1891,7 @@
     const flyby = REC.flyby;
     if (flyby && flyby.input === v.cameraInput) {
       flyby.bounds ||= recordingBounds(sim, L, Lt);
-      frameFlyby(v, flyby, ease(PLAYER.t / PLAYER.total()));
+      frameFlyby(v, flyby, ease(PLAYER.t / PLAYER.total()), sim.dieTop);
     }
     v.render();
     return true;
