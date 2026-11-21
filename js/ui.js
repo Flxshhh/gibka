@@ -1535,7 +1535,7 @@
     if (!on) { drawFrame(); return; }
     if (!sim3d && typeof THREE === 'undefined') $('#sim3d').innerHTML = '<p class="muted pad">Загружаю 3D…</p>';
     ensureThree(() => {
-      if (!sim3d) { $('#sim3d').innerHTML = ''; sim3d = new LG.View3D($('#sim3d')); sim3d.theta = -0.75; sim3d.phi = 1.2; }
+      if (!sim3d) { $('#sim3d').innerHTML = ''; sim3d = new LG.View3D($('#sim3d')); sim3d.theta = -1.15; sim3d.phi = 1.24; }
       if (!sim3d.ok) { sim3d = null; set3d(false); toast('3D недоступно: не загрузилась библиотека (нужен интернет)', 4000); return; }   // возвращаем плоский вид
       sim3d.key = null;
       drawFrame();
@@ -1711,34 +1711,84 @@
     if (mode === '3d') { if (PLAYER.d3 && sim3d && sim3d.ok) go(); else set3d(true, go); }
     else { if (PLAYER.d3) set3d(false); go(); }
   }
-  function draw3d(sim, s, sheet, tip, hits, showStop) {
+  // В пространстве зеркальная укладка — поворот на 180° вокруг оси Y.
+  function placementRotation(pose, step) {
+    const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), pose.rotation);
+    if (step.mirror) q.premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI));
+    return q;
+  }
+
+  function positionTransfer(mesh, from, previous, to, step, progress, length) {
+    const q = placementRotation(from, previous).multiply(placementRotation(to, step).invert());
+    const turn = ease((progress - 0.2) / 0.55);
+    mesh.quaternion.copy(q).slerp(new THREE.Quaternion(), turn);
+    // Держим середину между концами профиля, пока лист вынесен перед станком.
+    const anchor = pose => new THREE.Vector3((pose.start.x + pose.end.x) / 2, (pose.start.y + pose.end.y) / 2, 0);
+    const target = anchor(from).lerp(anchor(to), turn);
+    const retreat = progress < 0.25 ? ease(progress / 0.25) : 1 - ease((progress - 0.75) / 0.25);
+    const bounds = G.bounds(to.poly);
+    const flipClearance = previous.mirror === step.mirror ? 0 : length / 2;
+    target.x -= retreat * (120 + flipClearance + (bounds.x1 - bounds.x0 + bounds.y1 - bounds.y0) / 2);
+    target.y += retreat * 20;
+    mesh.position.copy(target.sub(anchor(to).applyQuaternion(mesh.quaternion)));
+  }
+
+  function draw3d(sim, s, pl, sheet, tip, hits, k, transferProgress) {
     const v = sim3d;
     if (!v || !v.ok) return false;
     const L = Math.max(50, Math.min(4000, +ST.part.L || 1000)), Lt = L * 1.08, m = ST.machine, H = sim.punchInfo.H;
-    const moving = ['punch', 'tang', 'holder'];
+    const moving = ['punch', 'tang', 'holder', 'beam'];
+    const dieBounds = G.bounds(sim.die.poly);
     if (v.key !== PLAYER.key) {
       v.key = PLAYER.key;
-      // Инструмент светлый, лист — насыщенный синий: лист сразу читается на фоне пуансона и матрицы
-      const TOOL = { color: 0xe9edf2, edges: true, edgeColor: 0x4a5662, metal: 0.05 };
-      v.setPart('pad', sim.pad, Lt, { color: 0xd3d9e0, edges: true, edgeColor: 0x4a5662, metal: 0.05 });
-      v.setPart('die', sim.die.poly, Lt, { color: 0xdde3ea, edges: true, edgeColor: 0x4a5662, metal: 0.05 });
+      v.scene.background = new THREE.Color(0xebedf0);
+      const TOOL = { color: 0xbac2ca, edges: true, edgeColor: 0x606a74, metal: 0.08 };
+      const FRAME = { color: 0x62717b, edges: true, edgeColor: 0x47545e, metal: 0.05 };
+      v.setPart('table', G.rect(-70, -40, 70, 0), Lt * 1.12, { color: 0xa1a7a8, metal: 0 });
+      v.setPart('pad', sim.pad, Lt, TOOL);
+      v.setPart('die', sim.die.poly, Lt, TOOL);
       v.setPart('punch', sim.punchLocal, Lt, TOOL);
       v.setPart('tang', sim.tangLocal, Lt, TOOL);
-      v.setPart('holder', G.rect(sim.tangCx - m.holderW / 2, H, sim.tangCx + m.holderW / 2, H + Math.min(m.holderH, 70)), Lt, { color: 0xf3f5f8, edges: true, edgeColor: 0x4a5662, metal: 0.05 });
+      const holderTop = H + Math.min(m.holderH, 70);
+      v.setPart('holder', G.rect(sim.tangCx - m.holderW / 2, H, sim.tangCx + m.holderW / 2, holderTop), Lt, FRAME);
+      v.setPart('beam', G.rect(sim.tangCx - 45, holderTop, sim.tangCx + 45, holderTop + 65), Lt * 1.1, FRAME);
       moving.forEach(n => { v.parts[n].position.y = PLAYER.openY || sim.tipOpen; });
       v.setPart('sheet', sheet, L, { color: 0x1565c0, metal: 0.1 });
-      v.setPart('gauge', null);
+      const railX = Math.max(dieBounds.x1 + 35, ...PLAYER.plan.steps.map(step => (step.stop || 0) + 45));
+      v.setPart('gaugeRail', G.rect(railX, sim.dieTop - 30, railX + 24, sim.dieTop - 12), Lt, { color: 0xa1a7a8, metal: 0 });
+      v.gaugeRailX = railX;
+      v.gaugeStop = undefined;
       // размерная линия длины гиба — перед матрицей, со стороны оператора
       const bd = G.bounds(sim.die.poly), dx = Math.min(bd.x0, -m.padW / 2) - 18, dy = 0, tk = 10;
       v.setLines('len', [[[dx, dy, -L / 2], [dx, dy, L / 2]], [[dx - tk, dy, -L / 2], [dx + tk, dy, -L / 2]], [[dx - tk, dy, L / 2], [dx + tk, dy, L / 2]],
         [[dx, dy, -L / 2], [bd.x0, dy, -L / 2]], [[dx, dy, L / 2], [bd.x0, dy, L / 2]]]);
       $('#sim3dLen').innerHTML = 'Длина гиба <b>' + fmt(L, 0) + ' мм</b>' + (L !== +ST.part.L ? ' <span class="muted">(в детали ' + fmt(ST.part.L, 0) + ')</span>' : '') +
         ' <span class="muted">· меняется слева, в «Инструменте»</span>';
-      v.fit(1.45);
+      v.fit(1.6);
     }
     moving.forEach(n => { v.parts[n].position.y = tip; });
-    v.setPart('sheet', sheet, L, { color: hits.length ? 0xff3b30 : 0x1565c0, metal: 0.1, edges: true, edgeColor: hits.length ? 0x8a0f0a : 0x0a3a78 });
-    v.setPart('gauge', showStop && s.stop != null ? G.rect(s.stop, sim.dieTop - 6, s.stop + 8, sim.dieTop + ST.part.S + 18) : null, Math.min(L, 160), { color: 0xc98a2b, edges: true });
+    const transferring = transferProgress != null;
+    const mesh = v.setPart('sheet', transferring ? pl.poly : sheet, L, { color: hits.length ? 0xff3b30 : 0x536579, metal: 0.08, edges: true, edgeColor: hits.length ? 0x8a0f0a : 0x334252 });
+    mesh.position.set(0, 0, 0);
+    mesh.quaternion.identity();
+    if (transferring) {
+      const steps = PLAYER.plan.steps, previous = steps[k - 1];
+      const done = steps.slice(0, k - 1).map(step => step.bend);
+      const from = sim.place(sim.fracs(done, previous.bend, 1), previous.bend, previous.mirror);
+      positionTransfer(mesh, from, previous, pl, s, transferProgress, L);
+    }
+    const stop = s.stop;
+    if (v.gaugeStop !== stop) {
+      v.gaugeStop = stop;
+      const y = sim.dieTop, railX = v.gaugeRailX;
+      const finger = stop == null ? null : [{ x: stop, y: y - 9 }, { x: railX + 15, y: y - 9 },
+        { x: railX + 15, y: y + 22 }, { x: stop + 16, y: y + 22 },
+        { x: stop + 16, y: y + 7 }, { x: stop, y: y + 7 }];
+      for (const side of [-1, 1]) {
+        const part = v.setPart('gauge' + side, finger, Math.min(42, L * 0.22), { color: 0x434743, edges: true, edgeColor: 0x30332f, metal: 0 });
+        part.position.z = side * L * 0.22;
+      }
+    }
     v.render();
     return true;
   }
@@ -1753,7 +1803,9 @@
     }
     const n = plan.steps.length, T = PLAYER.total();
     const k = Math.max(0, Math.min(n - 1, Math.floor(PLAYER.t / PLAYER.dur)));
-    const u = Math.min(1, (PLAYER.t - k * PLAYER.dur) / PLAYER.dur);
+    const progress = Math.min(1, (PLAYER.t - k * PLAYER.dur) / PLAYER.dur);
+    // В 3D оставляем больше времени на перенос детали между гибами.
+    const u = PLAYER.d3 && k > 0 ? (progress < 0.32 ? progress * 0.15 / 0.32 : 0.15 + (progress - 0.32) * 0.85 / 0.68) : progress;
     const s = plan.steps[k];
     const done = plan.steps.slice(0, k).map(x => x.bend);
     let f = 0, tip, slide = 0, phase;
@@ -1782,7 +1834,8 @@
     }
     const fs = (v.y1 - v.y0) / 32;
 
-    if (!(PLAYER.d3 && draw3d(sim, s, sheet, tip, hits, slide === 0 && u < 0.8))) {
+    const transferProgress = k > 0 && u < 0.15 ? u / 0.15 : null;
+    if (!(PLAYER.d3 && draw3d(sim, s, pl, sheet, tip, hits, k, transferProgress))) {
       let h = SV.path(sim.table, 'm-table' + cls('стол')) + SV.path(sim.pad, 'm-pad' + cls('подложка')) +
         SV.path(sim.die.poly, 'm-die' + cls('матрица')) + SV.line({ x: 0, y: v.y0 }, { x: 0, y: v.y1 }, 'axis');
       if (s.stop != null && slide === 0 && u < 0.8) {

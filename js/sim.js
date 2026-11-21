@@ -52,7 +52,7 @@
     return {
       poly: shape.poly.map(tf), A: shape.A.map(tf), B: shape.B.map(tf),
       start: tf(shape.start), end: tf(shape.end),
-      center: { x: 0, y: ty }, tipY: ty - ri
+      center: { x: 0, y: ty }, tipY: ty - ri, rotation: rot
     };
   };
 
