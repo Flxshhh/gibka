@@ -98,7 +98,7 @@
   };
 
   // Именованные части сцены (для 3D-гибки): контур вытягивается на длину, часть можно заменять и двигать по отдельности
-  View3D.prototype.setPart = function (name, poly, length, o) {
+  View3D.prototype.setPart = function (name, poly, length, o, centers = [0]) {
     if (!this.ok) return null;
     this.parts = this.parts || {};
     let g = this.parts[name];
@@ -106,10 +106,12 @@
     while (g.children.length) { const c = g.children.pop(); c.geometry.dispose(); c.material.dispose(); }
     if (!poly || poly.length < 3) return g;
     o = o || {};
-    const geo = new THREE.ExtrudeGeometry(new THREE.Shape(poly.map(p => new THREE.Vector2(p.x, p.y))), { depth: length, bevelEnabled: false });
-    geo.translate(0, 0, -length / 2);
-    g.add(new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: o.color || 0x9fb4cf, metalness: o.metal != null ? o.metal : 0.35, roughness: o.roughness ?? 0.5 })));
-    if (o.edges) g.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo, 25), new THREE.LineBasicMaterial({ color: o.edgeColor || 0x5b6570 })));
+    for (const z of centers) {
+      const geo = new THREE.ExtrudeGeometry(new THREE.Shape(poly.map(p => new THREE.Vector2(p.x, p.y))), { depth: length, bevelEnabled: false });
+      geo.translate(0, 0, z - length / 2);
+      g.add(new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: o.color || 0x9fb4cf, metalness: o.metal != null ? o.metal : 0.35, roughness: o.roughness ?? 0.5 })));
+      if (o.edges) g.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo, 25), new THREE.LineBasicMaterial({ color: o.edgeColor || 0x5b6570 })));
+    }
     return g;
   };
   // Набор отрезков в пространстве (размерная линия): segs — массив пар точек [[x,y,z],[x,y,z]]

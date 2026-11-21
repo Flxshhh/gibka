@@ -1218,7 +1218,7 @@
     const w = b.x1 - b.x0, hgt = b.y1 - b.y0, m = Math.max(w, hgt) * 0.04 + 2, fs = Math.max(w, hgt) / 16;
     const vb = SV.viewBox({ x0: b.x0 - m, x1: b.x1 + m, y0: b.y0 - m, y1: b.y1 + m }, 0);
     const pic = (pl, t, label, gauge) => {
-      let h = SV.path(sim.padSection, 'ps-mach') + SV.path(sim.adapter, 'ps-mach ps-insert') + SV.path(sim.die.poly, 'ps-tool') + sim.mountSection(pl.tipY).map((p, i) => SV.path(p, i === 5 ? 'ps-mach ps-insert' : 'ps-mach')).join('') + SV.path(t.tang, 'ps-tool') + SV.path(t.punch, 'ps-tool') +
+      let h = SV.path(sim.padSection, 'ps-mach') + SV.path(sim.adapter, 'ps-mach ps-insert') + SV.path(sim.die.poly, 'ps-tool') + sim.mountSection(pl.tipY).map((p, i) => SV.path(p, i === 5 ? 'ps-mach ps-joint' : 'ps-mach')).join('') + SV.path(t.tang, 'ps-tool') + SV.path(t.punch, 'ps-tool') +
         SV.path(pl.poly, 'ps-sheet') + SV.path(s.face === 'A' ? pl.A : pl.B, 'ps-face', false);
       if (gauge && s.stop != null) {
         h += SV.path(G.rect(s.stop, sim.dieTop - fs * 0.25, s.stop + fs * 0.4, sim.dieTop + S + fs * 0.9), 'ps-gauge');
@@ -1627,7 +1627,7 @@
     mount.forEach((p, i) => {
       const beam = i === 3;
       const active = hit(beam ? 'балка' : 'зажим пуансона');
-      poly(p, i === 5 ? '#adb6c1' : MF, active ? RED : ME, active ? 3 : 1.5);
+      poly(p, MF, active ? RED : i === 5 ? '#b6bec8' : ME, active ? 3 : i === 5 ? 0.7 : 1.5);
     });
     for (const part of [fr.t.tang, fr.t.punch]) poly(part, TF, hit('пуансон') ? RED : TE, hit('пуансон') ? 3 : 1.5);
     poly(fr.sheet, '#ffffff', fr.hits.length ? RED : '#2f3437', 2.2);
@@ -1810,8 +1810,8 @@
   function draw3d(sim, s, pl, sheet, tip, hits, k, transferProgress, gaugeOffset) {
     const v = sim3d;
     if (!v || !v.ok) return false;
-    const L = Math.max(50, Math.min(4000, +ST.part.L || 1000)), Lt = L * 1.08, m = ST.machine, H = sim.punchInfo.H;
-    const holders = sim.holderView.map((_, i) => 'holder' + i);
+    const L = Math.max(50, Math.min(4000, +ST.part.L || 1000)), Lt = L * 1.08, m = ST.machine;
+    const holders = ['holderBody', 'holderJaw', 'holderClamp', 'holderScrew'];
     const moving = ['punch', 'tang', 'beam', ...holders];
     const dieBounds = G.bounds(sim.die.poly);
     if (v.key !== PLAYER.key) {
@@ -1826,9 +1826,14 @@
       v.setPart('die', sim.die.poly, Lt, TOOL);
       v.setPart('punch', sim.punchLocal, Lt, TOOL);
       v.setPart('tang', sim.tangLocal, Lt, TOOL);
-      const holderTop = H + Math.min(m.holderH, 70);
-      for (let i = 0; i < 2; i++) v.setPart('holder' + i, sim.holderView[i], Lt, FRAME);
-      v.setPart('beam', G.rect(sim.tangCx - 45, holderTop, sim.tangCx + 45, holderTop + 65), Lt * 1.1, FRAME);
+      const [body, jaw, clamp, beam, screw] = sim.holderSection;
+      const length = 150, gap = 50, pitch = length + gap;
+      const count = Math.max(1, Math.floor((Lt + gap) / pitch));
+      const centers = Array.from({ length: count }, (_, i) => (i - (count - 1) / 2) * pitch);
+      [body, jaw, clamp, screw].forEach((profile, i) => {
+        v.setPart(holders[i], profile, length, FRAME, centers);
+      });
+      v.setPart('beam', beam, Math.max(Lt * 1.1, length), FRAME);
       moving.forEach(n => { v.parts[n].position.y = PLAYER.openY || sim.tipOpen; });
       v.setPart('sheet', sheet, L, { color: 0x1565c0, metal: 0.1 });
       const stops = PLAYER.plan.steps.map(step => step.stop).filter(stop => stop != null);
@@ -1949,7 +1954,7 @@
         h += SV.text({ x: s.stop + fs * 0.25, y: y - fs * 0.9 }, 'упор ' + fmt(s.stop, 1), fs * 0.6, 'lbl-s');
       }
       const mount = sim.mountSection(tip);
-      const mountClasses = ['m-holder', 'm-jaw', 'm-jaw', 'm-beam', 'm-jaw', 'm-holder m-insert'];
+      const mountClasses = ['m-holder', 'm-jaw', 'm-jaw', 'm-beam', 'm-jaw', 'm-holder m-joint'];
       h += mount.map((p, i) => SV.path(p, mountClasses[i] + cls(i === 3 ? 'балка' : 'зажим пуансона'))).join('') +
         SV.path(t.tang, 'm-punch' + cls('пуансон')) + SV.path(t.punch, 'm-punch' + cls('пуансон')) +
         SV.path(sheet, 'sheet' + (hits.length ? ' hit' : '')) + SV.path(face, 'faceUp', false);

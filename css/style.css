@@ -320,6 +320,7 @@ svg .dim-t { fill: var(--dim); }
 #simSvg .m-punch, #simSvg .m-die { fill: var(--sim-tool); stroke: var(--sim-tool-edge); stroke-width: .8; }
 #simSvg .m-jaw, #simSvg .m-holder, #simSvg .m-beam, #simSvg .m-pad, #simSvg .m-table { fill: var(--sim-mach); stroke: var(--sim-mach-edge); stroke-width: .8; }
 #simSvg .m-insert { fill: color-mix(in srgb, var(--sim-mach) 65%, var(--sim-tool-edge)); }
+#simSvg .m-joint { stroke: color-mix(in srgb, var(--sim-mach) 55%, var(--sim-mach-edge)); stroke-width: .65; }
 #simSvg .sheet { fill: var(--sim-sheet); stroke: var(--sim-sheet-edge); stroke-width: 1.1; stroke-linejoin: round; }
 #simSvg .faceUp { stroke-width: 1.2; opacity: .9; }
 #simSvg .hit { stroke: var(--hit) !important; stroke-width: 1.4 !important; }
@@ -445,6 +446,7 @@ thead th { font: 600 11.5px var(--f-body); text-transform: uppercase; letter-spa
   .pc-fig figcaption { font-size: 7.5pt; color: #555; }
   .pc-step { display: block; width: 100%; height: 38mm; }
   /* цвета как в симуляции на экране */
+  .pc-step .ps-mach.ps-joint { stroke: #b6bec8; stroke-width: .55; }
   .pc-step .ps-mach.ps-insert { fill: #adb6c1; }
   .pc-step .ps-tool { fill: #979da3; stroke: #6f767c; stroke-width: .8; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
   .pc-step .ps-mach { fill: #c4cad2; stroke: #9ea5ad; stroke-width: .8; vector-effect: non-scaling-stroke; }
