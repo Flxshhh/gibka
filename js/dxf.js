@@ -390,7 +390,8 @@
     const drawing = parse(text);
     const raw = segments(drawing);
     const hasCut = raw.some(s => s.layer.toUpperCase() === 'CUT');
-    if (hasCut || asFlat) return flatPart(drawing, hasCut);
+    const hasBend = raw.some(s => s.layer.toUpperCase() === 'BEND');
+    if (asFlat !== 'profile' && (hasCut || hasBend || asFlat)) return flatPart(drawing, hasCut);
     const seg = raw.filter(s => len(s) > 1e-6);
     if (!seg.length) return { error: 'В файле нет линий. Нужен профиль детали: ломаная линия или замкнутый контур листа.' };
     // связные цепочки: сначала от свободных концов (разомкнутые), потом замкнутые

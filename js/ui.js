@@ -280,6 +280,7 @@
   function setTab(t) {
     ST.ui.tab = t; saveAll();
     PLAYER.pause();
+    stopFlatPlayback();
     document.body.dataset.tab = t;   // для стилей: на телефоне у конструктора своя нижняя панель
     $$('.tabs button').forEach(b => { b.classList.toggle('on', b.dataset.tab === t); if (b.dataset.tab === t && b.scrollIntoView) b.scrollIntoView({ block: 'nearest', inline: 'center' }); });
     $$('.tab').forEach(s => { s.hidden = s.id !== 'tab-' + t; });
@@ -631,7 +632,7 @@
       '<div class="muted small">Через пробел: длины, а между ними углы гибов, как на чертеже (90 — прямой угол). Угол с минусом — гиб в другую сторону.</div></div>';
     h += '<div class="field"><label>Из чертежа</label><div class="row">' +
       '<button type="button" id="partDxfBtn" title="Поперечный профиль или развёртка со слоем CUT">' + ic('upload') + 'Импорт DXF</button>' +
-      '<button type="button" id="flatDxfBtn" class="ghost" title="Замкнутая развёртка без слоя CUT">Как развёртку</button></div></div>';
+      '<button type="button" id="flatDxfBtn" class="ghost" title="Замкнутая развёртка без слоя CUT">Как развёртку</button><button type="button" id="profileDxfBtn" class="ghost">Как профиль</button></div></div>';
     $('#addExtra').innerHTML = h;
 
     $('#partsForm').innerHTML =
@@ -781,22 +782,24 @@
   }
 
   function renderFlatDxf(flat) {
+    const lines = LG.FlatFold.axes(flat.bends);
     const svg = $('#profileSvg');
     const bounds = G.bounds(flat.contours.flat());
     const width = bounds.x1 - bounds.x0, height = bounds.y1 - bounds.y0;
     const fs = Math.max(width, height) / 36;
-    const view = flat.bends.reduce((b, line) => G.bounds(line, b), Object.assign({}, bounds));
+    const view = lines.reduce((b, line) => G.bounds(line, b), Object.assign({}, bounds));
     svg.setAttribute('viewBox', SV.viewBox(view, fs * 3));
     svg.innerHTML = '<path class="flat-dxf-cut" fill-rule="evenodd" d="' +
       flat.contours.map(loop => SV.d(loop, true)).join(' ') + '"/>' +
-      flat.bends.map(([a, b], i) =>
+      lines.map(([a, b], i) =>
         SV.line(a, b, 'flat-dxf-bend') +
         SV.text({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, 'Г' + (i + 1), fs, 'flat-dxf-label')
       ).join('');
     $('#partCalc').innerHTML = '<div class="flat-v">Габариты: <b>' + fmt(width, 2) + ' × ' + fmt(height, 2) + ' мм</b></div>' +
-      '<p class="muted small">Контуры реза: ' + flat.contours.length + ' · Линии гиба: ' + flat.bends.length + '</p>' +
-      (flat.bends.length ? '<div class="chips">' + flat.bends.map(([a, b], i) =>
-        '<span class="chip">Г' + (i + 1) + ' · ' + fmt(G.dist(a, b), 2) + ' мм</span>').join('') + '</div>' : '');
+      '<p class="muted small">Контуры реза: ' + flat.contours.length + ' · Линии гиба: ' + lines.length + '</p>' +
+      (lines.length ? '<p>Угол поворота от плоского листа: плюс — вверх со стороны A, минус — вниз. По умолчанию +90°.</p><div class="row">' +
+        lines.map(([a,b],i) => '<label>Г' + (i+1) + ' · ' + fmt(G.dist(a,b),1) + ' мм <input type="number" min="-175" max="175" step="any" data-flat-angle="' + i + '" value="' + (+flat.angles?.[i] || 90) + '" aria-label="Угол поворота Г' + (i+1) + '"> °</label>').join('') +
+        '</div><button id="foldFlat" class="primary">Симулировать гибку</button>' : '');
   }
 
   // Полоска развёртки с линиями гиба
@@ -934,18 +937,18 @@
     const root = $('#tab-part');
     bindProfileDrag($('#profileSvg'));
     $('#partDxf').addEventListener('change', e => readDxf(e.target, (text, name) => {
-      const r = LG.DXF.part(text, e.target.dataset.mode === 'flat'), p = ST.part;
+      const r = LG.DXF.part(text, e.target.dataset.mode === 'profile' ? 'profile' : e.target.dataset.mode === 'flat'), p = ST.part;
       if (r.error) { toast(r.error, 8000); return; }
       p.flatDxf = r.flatDxf || null;
       p.segs = r.segs || []; p.order = null; ST.ui.cursor = null; p.name = name;
       if (r.S) { p.S = r.S; p.dimMode = r.dimMode; }
       saveAll(); renderPartTab();
       if (p.flatDxf) {
-        toast('Развёртка загружена: линий гиба ' + p.flatDxf.bends.length);
+        toast('Вид сверху · развёртка. Линий гиба: ' + LG.FlatFold.axes(p.flatDxf.bends).length);
         $('#profileSvg').scrollIntoView({ block: 'center' });
         return;
       }
-      toast('Из чертежа: отрезков ' + r.segs.length + ', гибов ' + (r.segs.length - 1) + (r.S ? ', толщина ' + fmt(r.S, 2) + ' мм (размеры по средней линии)' : ' — проверьте толщину и то, как заданы размеры'), 6000);
+      toast('Вид спереди · профиль. Отрезков ' + r.segs.length + ', гибов ' + (r.segs.length - 1) + (r.S ? ', толщина ' + fmt(r.S, 2) + ' мм (размеры по средней линии)' : ' — проверьте толщину и то, как заданы размеры'), 6000);
     }));
     root.addEventListener('keydown', e => { if (e.target.id === 'segStr' && e.key === 'Enter') $('#segStrGo').click(); });
     document.addEventListener('keydown', e => {
@@ -956,6 +959,13 @@
     });
     root.addEventListener('change', e => {
       const id = e.target.id, p = ST.part;
+      if (e.target.hasAttribute('data-flat-angle')) {
+        const angle = Number(e.target.value), i = Number(e.target.dataset.flatAngle);
+        if (!Number.isFinite(angle) || Math.abs(angle) < 0.1 || Math.abs(angle) > 175) {
+          e.target.value = p.flatDxf.angles?.[i] ?? 90; toast('Введите угол от −175° до +175°, кроме нуля'); return;
+        }
+        (p.flatDxf.angles ||= [])[i] = angle; saveAll(); renderPartOutputs(); return;
+      }
       if (id === 'matSel') p.material = e.target.value;
       else if (id === 'dimSel') p.dimMode = e.target.value;
       else if (id === 'partName') { p.name = e.target.value; saveAll(); return; }
@@ -987,6 +997,7 @@
       }
       if (q('[data-vtx]')) { setCursor(+q('[data-vtx]').dataset.vtx); return; }
       if (q('[data-cur]')) { const v = q('[data-cur]').dataset.cur; setCursor(v === 'end' ? Infinity : +v); return; }
+      if (t.closest('#foldFlat')) { setTab('sim'); return; }
       if (t.id === 'goBend') {
         const r = resolve();
         if (!r.an.bends.length) { toast('Нужно хотя бы 2 отрезка — иначе гнуть нечего'); return; }
@@ -996,9 +1007,9 @@
         PLAYER.play();
         return;
       }
-      const dxfButton = q('#partDxfBtn, #flatDxfBtn');
+      const dxfButton = q('#partDxfBtn, #flatDxfBtn, #profileDxfBtn');
       if (dxfButton) {
-        $('#partDxf').dataset.mode = dxfButton.id === 'flatDxfBtn' ? 'flat' : 'auto';
+        $('#partDxf').dataset.mode = dxfButton.id === 'flatDxfBtn' ? 'flat' : dxfButton.id === 'profileDxfBtn' ? 'profile' : 'auto';
         $('#partDxf').click();
         return;
       }
@@ -1067,11 +1078,61 @@
       dieListHTML({ q: simPick.q.die, sel: p.dieId, attr: 'data-sim-die', open: openSet, kp: 'sd:' });
   }
 
+  let flatView, flatScene, flatRequest = 0, flatFrame = 0;
+  function stopFlatPlayback() {
+    cancelAnimationFrame(flatFrame); flatFrame = 0; flatRequest++;
+    $('#flatPlay').textContent = 'Пуск';
+  }
+  function renderFlatSimulation(p) {
+    stopFlatPlayback();
+    const request = flatRequest;
+    flatScene?.clear(); flatScene = null;
+    $('#flatStage').hidden = true; $('#flatPlayback').hidden = true;
+    $('#flatStep').textContent = ''; $('#flatPlan').textContent = 'Подготовка последовательности…';
+    const select = (id,title,items,value) => '<label>' + title + ' <select id="' + id + '">' +
+      items.map(item => '<option value="' + esc(item.id) + '"' + (item.id === value ? ' selected' : '') + '>' + esc(item.name) + '</option>').join('') + '</select></label>';
+    $('#flatTools').innerHTML = select('flatPunch','Пуансон',allPunches(),p.punchId) +
+      select('flatDie','Матрица',[{id:'auto',name:'Авто'},...allDies()],p.dieId);
+    ensureThree(() => {
+      if (request !== flatRequest || ST.ui.tab !== 'sim') return;
+      try {
+        if (typeof THREE === 'undefined') throw Error('Не загрузилась библиотека 3D. Откройте вкладку повторно.');
+        const r = resolve();
+        const sim = new LG.Sim({ an:r.an, S:r.S, Ri:r.Ri, K:r.K, punch:r.punch, punchMirror:p.punchMirror, die:r.die, machine:ST.machine });
+        const model = LG.FlatFold.model(p.flatDxf,sim);
+        $('#flatStage').hidden = false;
+        flatView ||= new LG.View3D($('#flatStage'));
+        flatScene = LG.FlatFold.scene(flatView,model,sim,msg => { $('#flatStep').textContent = msg; });
+        $('#flatPlan').textContent = 'Порядок: ' + model.plan.steps.map(s=>'Г'+(s.bend+1)).join(' → ') +
+          ' · ' + r.punch.name + ' / ' + r.die.name + (model.plan.ok ? '' : ' · Есть возможные столкновения');
+        const slider=$('#flatTime'); slider.max=model.plan.steps.length; slider.value=0;
+        $('#flatPlayback').hidden=false;
+      } catch(err) {
+        $('#flatStage').hidden=true; $('#flatPlan').textContent=err.message;
+      }
+    });
+  }
+  function playFlat() {
+    if(flatFrame) {stopFlatPlayback();return;}
+    if(!flatScene) return;
+    const slider=$('#flatTime'), total=+slider.max;
+    if(+slider.value>=total) slider.value=0;
+    const start=performance.now()-Number(slider.value)*4000;
+    $('#flatPlay').textContent='Пауза';
+    function tick(now){
+      const t=Math.min(total,(now-start)/4000);
+      slider.value=t;flatScene.draw(t);
+      if(t<total) flatFrame=requestAnimationFrame(tick);
+      else stopFlatPlayback();
+    }
+    flatFrame=requestAnimationFrame(tick);
+  }
+
   function renderSimTab() {
     const p = ST.part;
     $('#flatSimNote').hidden = !p.flatDxf;
     $('#profileSim').hidden = !!p.flatDxf;
-    if (p.flatDxf) return;
+    if (p.flatDxf) { renderFlatSimulation(p); return; }
     const r = resolve();
     const mid = r.opts[Math.round((r.opts.length - 1) / 2)];
     const vSel = '<div class="field"><label>Раскрытие V по таблице</label><div class="vinfo">S=' + fmt(r.S, 2) + ' → среднее <b>' + fmt(mid.F, 0) +
@@ -1310,6 +1371,11 @@
   }
 
   function bindSimTab() {
+    $('#flatPlay').addEventListener('click', playFlat);
+    $('#flatTime').addEventListener('input', e => {stopFlatPlayback();flatScene?.draw(+e.target.value);});
+    $('#flatTools').addEventListener('change', e => {
+      ST.part[e.target.id === 'flatPunch' ? 'punchId' : 'dieId'] = e.target.value;saveAll();renderSimTab();
+    });
     $('#backToFlat').addEventListener('click', () => setTab('part'));
     const root = $('#tab-sim');
     root.addEventListener('change', e => {

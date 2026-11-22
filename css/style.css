@@ -522,3 +522,6 @@ svg .flat-dxf-label { fill: var(--warn); stroke: var(--card); stroke-width: 3; v
   body[data-tab="part"].flat-part { padding-bottom: env(safe-area-inset-bottom, 0px); }
   body[data-tab="part"].flat-part .toast { bottom: calc(20px + env(safe-area-inset-bottom, 0px)); }
 }
+
+#flatStage { height: clamp(300px, 55vh, 680px); background: var(--sunk); border-radius: var(--r-c); }
+#flatTime { flex: 1; min-width: 120px; }

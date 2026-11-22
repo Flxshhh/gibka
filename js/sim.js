@@ -253,6 +253,7 @@
       for (let i = 0; i < nb; i++) if (done.indexOf(i) < 0) rest.push(i);
       // крайние раньше; при равенстве — без переворота листа
       rest.sort((a, b) => {
+        if (self.compareNext) return self.compareNext(a, b, steps);
         const ea = Math.min(a, nb - 1 - a), eb = Math.min(b, nb - 1 - b);
         if (ea !== eb) return ea - eb;
         const fa = self.faceUp(a) === prevFace ? 0 : 1, fb = self.faceUp(b) === prevFace ? 0 : 1;
