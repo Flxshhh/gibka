@@ -113,7 +113,7 @@
   }
   const sizes = [...assemblies.keys()].filter(Boolean).sort((a,b)=>b-a);
 
-  function model(flat, sim, order = null) {
+  function model(flat, sim, order = null, planOnly = false) {
     const lines=axes(flat.bends), {panels,hinges}=topology(flat,lines);
     const angles = lines.map((_, i) => flat.angles?.[i] ?? 90);
     if (angles.some(a => !Number.isFinite(a) || Math.abs(a) < 0.1 || Math.abs(a) > 175)) {
@@ -274,6 +274,7 @@
     const manual = Array.isArray(order) && order.length===lines.length &&
       new Set(order).size===lines.length && order.every(i=>Number.isInteger(i)&&i>=0&&i<lines.length);
     const plan=LG.Sim.prototype.plan.call(planner,manual?order:null,160);
+    if (planOnly) return {plan};
     // Ищем заднюю кромку в полосе каждого пальца на высоте выбранной матрицы.
     // На развёртке с вырезом эти две координаты X могут различаться.
     function gaugeSetup(done, step) {
@@ -314,9 +315,17 @@
       return {fingers,rail,retreat};
     }
     const done=[];
-    for(const step of plan.steps) {
+    for (const [k,step] of plan.steps.entries()) {
       step.setup=choices.get(choiceKey(done,step.bend,step.mirror));
       step.gauge = gaugeSetup(done,step);
+      step.face = planner.faceUp(step.bend);
+      const previous = plan.steps[k-1];
+      step.turn = previous ? Math.abs(LG.G.norm180((directions[step.bend]-directions[previous.bend])*180/Math.PI +
+        (step.mirror!==previous.mirror?180:0))) : 0;
+      step.flip = !!previous && step.face !== previous.face;
+      step.notes = [];
+      if (step.flip) step.notes.push('Переверните лист');
+      if (step.turn>.5) step.notes.push('Поворот на '+Math.round(step.turn)+'°');
       done.push(step.bend);
     }
     return {lines,angles,panels,hinges,span,transform,contacts,toolLength,centers,plan};
@@ -414,7 +423,7 @@
       g.fingers.forEach((_,i) => {view.parts['gauge'+i].position.x = x;});
     }
     const ease=t=>(1-Math.cos(Math.PI*Math.max(0,Math.min(1,t))))/2;
-    function draw(time, spatial=true){
+    function draw(time, spatial=true, picture=false){
       view.sectionView = !spatial;
       const k=Math.min(steps.length-1,Math.floor(time)),u=time-k,s=steps[k];
       const done=steps.slice(0,k).map(step=>step.bend);
@@ -433,7 +442,7 @@
       }
       install(s.setup);
       segments.forEach(part=>{part.group.position.y=y;});
-      drawGauge(s,u);
+      drawGauge(s,picture && f === 0 ? .35 : u);
       const hits = m.contacts(pose,y,s.bend,f,s.setup);
       meshes.forEach((mesh,i)=>{
         mesh.matrix.copy(pose.matrices[i]); mesh.matrixWorldNeedsUpdate=true;
@@ -442,12 +451,10 @@
       moving.forEach(group=>{group.position.y=y;});
       marks.forEach((mark,i)=>mark.material.color.setHex(i===s.bend?0xffa500:0x617489));
       view.render();
-      const previous=steps[k-1],direction=(i)=>Math.atan2(m.lines[i][1].y-m.lines[i][0].y,m.lines[i][1].x-m.lines[i][0].x);
-      const turn=previous?Math.abs(LG.G.norm180((direction(s.bend)-direction(previous.bend))*180/Math.PI+(s.mirror!==previous.mirror?180:0))):0;
       const phase=u<.25?(k?'Переустановка':'Укладка'):u<.4?'Подвод пуансона':u<.82?'Гибка':'Возврат';
       report('Шаг '+(k+1)+' из '+steps.length+' · Г'+(s.bend+1)+' · '+phase+
-        ' · сторона '+(m.angles[s.bend]>0?'A':'B')+' вверх'+(turn>.5?' · поворот '+Math.round(turn)+'°':'')+
-        (previous && Math.sign(m.angles[s.bend])!==Math.sign(m.angles[previous.bend])?' · переворот':'')+
+        ' · сторона '+s.face+' вверх'+(s.turn>.5?' · поворот '+Math.round(s.turn)+'°':'')+
+        (s.flip?' · переворот':'')+
         (hits.length?' · Столкновение: '+hits.join(', '):''), hits.length > 0);
     }
     draw(0);view.target.set(0,sim.dieTop+m.span*.12,0);view.radius=Math.max(160,m.span*2.1);view.resize();

@@ -784,20 +784,26 @@
     $('#partCalc').innerHTML = h;
   }
 
-  function renderFlatDxf(flat) {
+  function flatMarkup(flat) {
     const lines = LG.FlatFold.axes(flat.bends);
-    const svg = $('#profileSvg');
     const bounds = G.bounds(flat.contours.flat());
     const width = bounds.x1 - bounds.x0, height = bounds.y1 - bounds.y0;
     const fs = Math.max(width, height) / 36;
     const view = lines.reduce((b, line) => G.bounds(line, b), Object.assign({}, bounds));
-    svg.setAttribute('viewBox', SV.viewBox(view, fs * 3));
-    svg.innerHTML = '<path class="flat-dxf-cut" fill-rule="evenodd" d="' +
+    const html = '<path class="flat-dxf-cut" fill-rule="evenodd" d="' +
       flat.contours.map(loop => SV.d(loop, true)).join(' ') + '"/>' +
       lines.map(([a, b], i) =>
         SV.line(a, b, 'flat-dxf-bend') +
         SV.text({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, 'Г' + (i + 1), fs, 'flat-dxf-label')
       ).join('');
+    return {html, viewBox: SV.viewBox(view, fs * 3), width, height, lines};
+  }
+
+  function renderFlatDxf(flat) {
+    const {html, viewBox, width, height, lines} = flatMarkup(flat);
+    const svg = $('#profileSvg');
+    svg.setAttribute('viewBox', viewBox);
+    svg.innerHTML = html;
     $('#partCalc').innerHTML = '<div class="flat-v">Габариты: <b>' + fmt(width, 2) + ' × ' + fmt(height, 2) + ' мм</b></div>' +
       '<p class="muted small">Контуры реза: ' + flat.contours.length + ' · Линии гиба: ' + lines.length + '</p>' +
       (lines.length ? '<p>Угол поворота от плоского листа: плюс — вверх со стороны A, минус — вниз. По умолчанию +90°.</p><div class="row">' +
@@ -1090,18 +1096,19 @@
   function sectionList(setup) {
     return setup.pieces.map(p => p.length).join(' + ') || 'нет сборки';
   }
-  function flatTable(model, printing=false) {
+  const flatStepNotes = step => ['Сторона ' + step.face + ' вверх', ...step.notes];
+  function flatTable(model) {
     const steps = model.plan.steps;
-    return '<div class="tbl-wrap"><table class="bends"><thead><tr><th>Шаг</th><th>Гиб</th><th>Угол поворота полки</th><th>Линия, мм</th><th>Секции пуансона, мм</th><th>Упоры, мм</th><th>Статус</th>'+ (printing?'':'<th></th>') +'</tr></thead><tbody>' +
+    return '<div class="tbl-wrap"><table class="bends"><thead><tr><th>Шаг</th><th>Гиб</th><th>Внутренний угол</th><th>Действие оператора</th><th>Линия, мм</th><th>Секции пуансона, мм</th><th>Упоры, мм</th><th>Статус</th><th></th></tr></thead><tbody>' +
       steps.map((s,k) => {
         const first=s.hits.length ? Math.min(...s.hits.map(h=>h.f)) : 0;
         const time=k+0.4+0.42*Math.acos(1-2*first)/Math.PI;
         const gap=s.setup.width-s.setup.size;
-        return '<tr class="'+(s.hits.length?'row-bad':'')+'"><td>'+(printing?k+1:'<button class="link" data-flat-time="'+time+'">'+(k+1)+'</button>')+'</td><td>Г'+(s.bend+1)+'</td><td>'+fmt(model.angles[s.bend],1)+'°</td><td>'+fmt(s.setup.width,2)+'</td><td>'+sectionList(s.setup)+' = '+s.setup.size+
+        return '<tr class="'+(s.hits.length?'row-bad':'')+'"><td><button class="link" data-flat-time="'+time+'">'+(k+1)+'</button></td><td>Г'+(s.bend+1)+'</td><td>'+fmt(180-Math.abs(model.angles[s.bend]),1)+'°</td><td>'+flatStepNotes(s).map(noteHtml).join('')+'</td><td>'+fmt(s.setup.width,2)+'</td><td>'+sectionList(s.setup)+' = '+s.setup.size+
           (gap>0.01?'<div class="warn small">Короче линии на '+fmt(gap,2)+' мм</div>':'')+'</td><td>'+
           s.gauge.fingers.map(f => f.stop == null ? '—' : fmt(f.stop,1)).join(' / ')+'</td><td>' +
-          (s.hits.length?'<span class="bad">'+hitList(s)+'</span>':'<span class="good">Без удара</span>')+'</td>'+(printing?'':'<td class="nowrap">'+
-          [-1,1].map(d=>'<button class="ghost sm" data-mv="'+d+'" data-k="'+k+'" aria-label="'+(d<0?'Раньше':'Позже')+'">'+(d<0?'↑':'↓')+'</button>').join('')+'</td>')+'</tr>';
+          (s.hits.length?'<span class="bad">'+hitList(s)+'</span>':'<span class="good">Без удара</span>')+'</td><td class="nowrap">'+
+          [-1,1].map(d=>'<button class="ghost sm" data-mv="'+d+'" data-k="'+k+'" aria-label="'+(d<0?'Раньше':'Позже')+'">'+(d<0?'↑':'↓')+'</button>').join('')+'</td></tr>';
       }).join('')+'</tbody></table></div>';
   }
   function renderFlatSimulation(p,autoplay) {
@@ -1124,16 +1131,23 @@
           $('#simHud').classList.toggle('bad',hit);
         });
         flatModel=model; PLAYER.plan=model.plan; PLAYER.sim=sim; PLAYER.t=0;
-        $('#bendOut').innerHTML=(model.plan.ok?'<p class="good">В выбранной последовательности ударов не обнаружено</p>':
-          '<div class="alert"><b>Для выбранного инструмента есть ограничения</b><div>Проверьте отмеченные шаги и выбранный инструмент.</div></div>')+
-          (p.order?'<button id="orderAuto" class="sm">Подобрать авто</button>':'')+flatTable(model)+
-          '<p class="muted small">Длину сборки и разницу с линией гиба проверяйте по шагам. Модель использует прямые шарниры и не проверяет столкновения полок между собой.</p>';
-        const maxLength=Math.max(...model.plan.steps.map(s=>s.setup.width));
-        $('#calcOut').innerHTML='<div class="kv">'+kv('Толщина листа',fmt(r.S,2)+' мм')+kv('Макс. длина гиба',fmt(maxLength,2)+' мм')+
-          kv('Усилие на эту длину',fmt(r.force.F*maxLength/1000,1)+' кН')+gapRow(r)+'</div>';
+        PLAYER.key = Symbol();
+        PLAYER.alts = []; PLAYER.altsBusy = false; PLAYER.dieAlts = []; PLAYER.dieAltsBusy = false;
+        if (!model.plan.ok) findAlternatives(r);
+        renderFlatBends();
+        renderCalc(Math.max(...model.plan.steps.map(s=>s.setup.width)));
         drawFrame(); if(autoplay) PLAYER.play();
       } catch(err) {$('#simHud').textContent=err.message;$('#simHud').classList.add('bad');}
     });
+  }
+  function renderFlatBends() {
+    const model = flatModel, p = ST.part;
+    $('#bendOut').innerHTML = (model.plan.ok
+      ? '<p class="good">В выбранной последовательности ударов не обнаружено</p>'
+      : '<div class="alert"><b>Для выбранного инструмента есть ограничения</b><div>Проверьте отмеченные шаги и выбранный инструмент.</div>' +
+        toolAlternatives(!p.order) + '</div>') +
+      (p.order ? '<button id="orderAuto" class="sm">Подобрать авто</button>' : '') + flatTable(model) +
+      '<p class="muted small">Длину сборки и разницу с линией гиба проверяйте по шагам. Модель использует прямые шарниры и не проверяет столкновения полок между собой.</p>';
   }
   function renderSimTab(autoplay = false) {
     const p = ST.part, flat=!!p.flatDxf;
@@ -1184,19 +1198,21 @@
       ? ' — инструмент не помещается: пуансон + матрица + подложка выше открытой высоты пресса (' + fmt(m.D, 0) + ' мм)'
       : ' <span class="muted">(пуансон поднят — до матрицы)</span>'));
   }
-  function renderCalc() {
+  function renderCalc(flatLength) {
     const r = R, p = ST.part;
-    const over = r.ton > ST.machine.maxTon;
+    const length = flatLength ?? p.L;
+    const fullKN = flatLength == null ? r.fullKN : r.force.F * length / 1000, ton = fullKN / 9.81;
+    const over = ton > ST.machine.maxTon;
     let h = '<div class="kv">' +
       kv('Лист', fmt(r.S, 2) + ' мм · ' + LG.MATERIALS[p.material].name.split(',')[0]) +
       kv('Матрица', (r.die.id !== 'auto' ? esc(r.die.name) + ' · ' : '') + 'V' + fmt(r.V, 1) + ' · ' + fmt(r.die.angle, 0) + '° · R' + fmt(r.die.r, 1) +
         (r.auto ? ' <span class="muted">(авто по таблице)</span>' : '')) +
-      kv('Мин. полка B', fmt(r.B90, 1) + ' мм <span class="muted">(90°)</span>') +
+      (p.flatDxf ? '' : kv('Мин. полка B', fmt(r.B90, 1) + ' мм <span class="muted">(90°)</span>') +
       kv('Ri', fmt(r.Ri, 2) + ' мм' + (p.riOverride > 0 ? ' <span class="muted">(вручную)</span>' : ' <span class="muted">(табл. ' + fmt(r.riTable, 2) + ')</span>')) +
-      kv('K-фактор', fmt(r.K, 3)) +
+      kv('K-фактор', fmt(r.K, 3))) +
       kv('Усилие', fmt(r.force.F, 0) + ' кН/м <span class="muted">(' + r.force.src + ')</span>') +
-      kv('На ' + fmt(p.L, 0) + ' мм', '<b class="' + (over ? 'bad' : '') + '">' + fmt(r.fullKN, 1) + ' кН ≈ ' + fmt(r.ton, 1) + ' т</b>' + (over ? ' — больше, чем может пресс (' + ST.machine.maxTon + ' т)' : '')) +
-      kv('Заготовка', fmt(r.an.flat, 2) + ' мм') +
+      kv('На ' + fmt(length, flatLength == null ? 0 : 1) + ' мм', '<b class="' + (over ? 'bad' : '') + '">' + fmt(fullKN, 1) + ' кН ≈ ' + fmt(ton, 1) + ' т</b>' + (over ? ' — больше, чем может пресс (' + ST.machine.maxTon + ' т)' : '')) +
+      (p.flatDxf ? '' : kv('Заготовка', fmt(r.an.flat, 2) + ' мм')) +
       gapRow(r) +
       '</div>';
     const msgs = r.an.errors.map(e => '<li class="bad">' + esc(e) + '</li>').concat(r.an.warnings.map(w => '<li class="warn">' + esc(w) + '</li>'));
@@ -1209,6 +1225,28 @@
   // подсказка оператору со значком: перевернуть лист / развернуть деталь
   const noteHtml = n => '<div class="note-line">' + (/^Переверните/.test(n) ? ic('flipv') : /^Разверните/.test(n) ? ic('swap') : '') + esc(n) + '</div>';
   const hitList = s => uniq(s.hits.map(x => x.angle ? x.tool : 'удар — ' + x.tool)).join(', ');
+  function toolAlternatives(auto) {
+    let h = '';
+    if (PLAYER.altsBusy && !(PLAYER.alts && PLAYER.alts.length)) h += '<div class="small muted">Подбираю пуансон, который подойдёт…</div>';
+    else if (PLAYER.alts && PLAYER.alts.length) {
+      h += '<div class="alts">Подходящие пуансоны: ' + PLAYER.alts.map((a, i) =>
+        '<button type="button" class="sm" data-alt="' + i + '">' + (a.same ? 'этот же, выемкой ' + (a.mirror ? 'к оператору' : 'к упору')
+          : esc(a.name) + ' · A' + fmt(a.H, 0) + (a.angle ? ' · ' + fmt(a.angle, 0) + '°' : '') + (a.mirror !== !!ST.part.punchMirror ? ' · выемкой ' + (a.mirror ? 'к оператору' : 'к упору') : '')) +
+        '</button>').join(' ') + '</div>';
+    } else if (auto) h += '<div class="small">' + (PLAYER.alts && PLAYER.alts.exhausted
+        ? 'Ни один пуансон из каталога и «Моих» не подходит с этой матрицей.'
+        : 'Среди похожих пуансонов подходящего не нашлось.') + '</div>';
+    // второй вариант — поменять матрицу (подбор по таблице от среднего V)
+    if (!PLAYER.altsBusy) {
+      if (PLAYER.dieAltsBusy) h += '<div class="small muted">Подбираю матрицу по таблице…</div>';
+      else if (PLAYER.dieAlts && PLAYER.dieAlts.length) h += '<div class="alts">' + (PLAYER.alts && PLAYER.alts.length ? 'Или оставить пуансон и поменять матрицу' : 'С этим пуансоном получится, если поменять матрицу') +
+        ' <span class="muted">(по таблице, среднее V' + PLAYER.dieVmid + ')</span>: ' + PLAYER.dieAlts.map(d =>
+          '<button type="button" class="sm" data-sugdie="' + d.id + '"' + (d.mirror !== !!ST.part.punchMirror ? ' data-mir="' + (d.mirror ? 1 : 0) + '"' : '') + '>' + esc(d.name) + ' · V' + fmt(d.V, 1) + ' · ' + fmt(d.angle, 0) + '°' +
+          (d.mirror !== !!ST.part.punchMirror ? ' · выемкой ' + (d.mirror ? 'к оператору' : 'к упору') : '') + '</button>').join(' ') + '</div>';
+      else if (auto && !(PLAYER.alts && PLAYER.alts.length)) h += '<div class="small">Сменой матрицы по таблице тоже не получается — нужна другая деталь или порядок гибов вручную.</div>';
+    }
+    return h;
+  }
   function renderBends() {
     const pl = PLAYER.plan, an = R.an;
     const box = $('#bendOut');
@@ -1224,24 +1262,7 @@
           ? (pl.exhaustive ? 'Проверены все порядки гибов и все положения детали (развернуть другим краем к упору, перевернуть лист). Показан вариант с наименьшим числом ударов.'
                            : 'Проверено несколько тысяч вариантов порядка и положения детали — без ударов не нашлось.')
           : 'Это ваш порядок гибов — нажмите «Подобрать авто», чтобы перебрать все варианты.') + '</div>';
-      if (PLAYER.altsBusy && !(PLAYER.alts && PLAYER.alts.length)) h += '<div class="small muted">Подбираю пуансон, который подойдёт…</div>';
-      else if (PLAYER.alts && PLAYER.alts.length) {
-        h += '<div class="alts">Подойдут без удара, например: ' + PLAYER.alts.map((a, i) =>
-          '<button type="button" class="sm" data-alt="' + i + '">' + (a.same ? 'этот же, выемкой ' + (a.mirror ? 'к оператору' : 'к упору')
-            : esc(a.name) + ' · A' + fmt(a.H, 0) + (a.angle ? ' · ' + fmt(a.angle, 0) + '°' : '') + (a.mirror !== !!ST.part.punchMirror ? ' · выемкой ' + (a.mirror ? 'к оператору' : 'к упору') : '')) +
-          '</button>').join(' ') + '</div>';
-      } else if (auto) h += '<div class="small">' + (PLAYER.alts && PLAYER.alts.exhausted
-          ? 'Ни один пуансон из каталога и «Моих» не подходит с этой матрицей.'
-          : 'Среди похожих пуансонов подходящего не нашлось.') + '</div>';
-      // второй вариант — поменять матрицу (подбор по таблице от среднего V)
-      if (!PLAYER.altsBusy) {
-        if (PLAYER.dieAltsBusy) h += '<div class="small muted">Подбираю матрицу по таблице…</div>';
-        else if (PLAYER.dieAlts && PLAYER.dieAlts.length) h += '<div class="alts">' + (PLAYER.alts && PLAYER.alts.length ? 'Или оставить пуансон и поменять матрицу' : 'С этим пуансоном получится, если поменять матрицу') +
-          ' <span class="muted">(по таблице, среднее V' + PLAYER.dieVmid + ')</span>: ' + PLAYER.dieAlts.map(d =>
-            '<button type="button" class="sm" data-sugdie="' + d.id + '"' + (d.mirror !== !!ST.part.punchMirror ? ' data-mir="' + (d.mirror ? 1 : 0) + '"' : '') + '>' + esc(d.name) + ' · V' + fmt(d.V, 1) + ' · ' + fmt(d.angle, 0) + '°' +
-            (d.mirror !== !!ST.part.punchMirror ? ' · выемкой ' + (d.mirror ? 'к оператору' : 'к упору') : '') + '</button>').join(' ') + '</div>';
-        else if (auto && !(PLAYER.alts && PLAYER.alts.length)) h += '<div class="small">Сменой матрицы по таблице тоже не получается — нужна другая деталь или порядок гибов вручную.</div>';
-      }
+      h += toolAlternatives(auto);
       h += '</div>';
     }
     h += '<div class="row between"><div class="status ' + (pl.ok ? 'good' : 'warn') + '">' + ic(pl.ok ? 'check' : 'warn') + (auto
@@ -1299,7 +1320,7 @@
     const steps = p.flatDxf && flatModel?.plan.steps;
     const length = steps ? Math.max(...steps.map(s => s.setup.width)) : p.L;
     const sections = steps ? steps.map(s => 'Г' + (s.bend + 1) + ' (' + sectionList(s.setup) + ' мм)').join(', ') : '';
-    const bends = steps ? steps.map(s => fmt(flatModel.angles[s.bend], 0) + '°').join(', ') : r.an.bends.map(b => fmt(b.incl, 0) + '°').join(', ');
+    const bends = steps ? steps.map(s => fmt(180 - Math.abs(flatModel.angles[s.bend]), 0) + '°').join(', ') : r.an.bends.map(b => fmt(b.incl, 0) + '°').join(', ');
     const txt = 'Здравствуйте! Нужен инструмент для листогиба:\n' +
       '— Пуансон: ' + r.punch.name + ' (A ' + fmt(r.punch.H, 1) + ' мм' + (r.punch.angle ? ', угол ' + fmt(r.punch.angle, 0) + '°' : '') + ', R ' + fmt(r.punch.r, 2) + '), длина ' + fmt(steps ? Math.max(...steps.map(s=>s.setup.size)) : r.punch.L || p.L, 0) + ' мм\n' + (sections ? '— Сборки по шагам: ' + sections + '\n' : '') +
       '— Матрица: ' + (r.die.id === 'auto' ? 'V' + fmt(r.V, 1) + ', ' + fmt(r.die.angle, 0) + '°' : r.die.name + ' (V' + fmt(r.V, 1) + ', ' + fmt(r.die.angle, 0) + '°)') + '\n' +
@@ -1350,16 +1371,45 @@
     return '<div class="pc-figs">' + pic(p0, t0, 'уложен', true) + pic(p1, t1, 'готово', false) + '</div>';
   }
 
-  // Карта гибки для печати или сохранения в PDF: всё, что нужно оператору, на одном листе
-  function printCard() {
-    if(ST.part.flatDxf) {
-      if(!flatModel) return;
-      $('#printCard').innerHTML='<h1>Карта гибки · '+esc(ST.part.name||'Деталь')+'</h1><p>'+esc(R.punch.name)+' · '+esc(R.die.name)+' · S '+fmt(R.S,2)+' мм</p>'+flatTable(flatModel,true);
-      window.print();return;
+  function flatStepPictures(sim) {
+    const v = flatView, camera = {target:v.target.clone(), radius:v.radius, theta:v.theta, phi:v.phi};
+    const canvas = v.renderer.domElement;
+    const reference = new THREE.Vector3(0, sim.dieTop + sim.punchInfo.H * 0.35, 0);
+    v.theta = -0.4;
+    v.phi = 1.27;
+    v.target.copy(reference);
+    v.radius = (flatModel.span * 0.7 + sim.punchInfo.H * 0.55 + 20) /
+      (Math.tan(G.deg(v.camera.fov / 2)) * Math.min(1, v.camera.aspect));
+    try {
+      return flatModel.plan.steps.map((_, k) => '<div class="pc-figs">' +
+        [[.4,'уложен'],[.82,'готово']].map(([phase,label]) => {
+          flatScene.draw(k+phase, true, true);
+          return '<figure class="pc-fig"><img class="pc-step pc-render" src="' + canvas.toDataURL() +
+            '" alt="Лист ' + label + ', шаг ' + (k+1) + '"><figcaption>' + label + '</figcaption></figure>';
+        }).join('') + '</div>');
+    } finally {
+      v.target.copy(camera.target);
+      v.radius = camera.radius;
+      v.theta = camera.theta;
+      v.phi = camera.phi;
+      drawFrame();
     }
+  }
+
+  // Карта гибки для печати или сохранения в PDF.
+  function printCard() {
     const p = ST.part, r = R || resolve(), pl = PLAYER.plan;
     if (!pl || !pl.steps.length) { toast('Сначала нужна деталь с гибами без ошибок'); return; }
-    const pm = profileMarkup(r, false), mat = LG.MATERIALS[p.material].name.split(',')[0];
+    const flat = p.flatDxf && flatModel;
+    const pm = flat ? flatMarkup(p.flatDxf) : profileMarkup(r, false);
+    const mat = LG.MATERIALS[p.material].name.split(',')[0];
+    const length = flat ? Math.max(...pl.steps.map(s=>s.setup.width)) : p.L;
+    let pictures;
+    if (flat) {
+      PLAYER.pause();
+      try { pictures = flatStepPictures(PLAYER.sim); }
+      catch (err) { toast('Не удалось получить кадры для карты: ' + err.message); return; }
+    }
     const row = (k, v) => '<tr><th>' + k + '</th><td>' + v + '</td></tr>';
     const d = new Date(), date = ('0' + d.getDate()).slice(-2) + '.' + ('0' + (d.getMonth() + 1)).slice(-2) + '.' + d.getFullYear();
     let h = '<div class="pc-head"><div class="pc-brand"><img src="img/logo.png" alt="wirken">' +
@@ -1367,29 +1417,36 @@
       '<div><div class="pc-title">Карта гибки</div><div class="pc-sub">' + esc(p.name || 'Деталь') + ' · ' + date + '</div></div></div>';
     h += '<div class="pc-cols"><table class="pc-kv">' +
       row('Лист', mat + ', S = ' + fmt(r.S, 2) + ' мм') +
-      row('Заготовка', '<b>' + fmt(r.an.flat, 2) + ' × ' + fmt(p.L, 0) + ' мм</b>') +
+      row('Заготовка', '<b>' + fmt(flat ? pm.width : r.an.flat, 2) + ' × ' + fmt(flat ? pm.height : p.L, flat ? 2 : 0) + ' мм</b>') +
       row('Пуансон', esc(r.punch.name) + (r.punch.angle ? ' · ' + fmt(r.punch.angle, 0) + '°' : '') + ' · R' + fmt(r.punch.r, 2) + (punchKind(r.punch) === 'Гусак' ? ' · выемкой ' + (p.punchMirror ? 'к оператору' : 'к упору') : '')) +
       row('Матрица', (r.die.id === 'auto' ? '' : esc(r.die.name) + ' · ') + 'V' + fmt(r.V, 1) + ' · ' + fmt(r.die.angle, 0) + '°') +
-      row('Усилие', fmt(r.force.F, 0) + ' кН/м · на длину ≈ ' + fmt(r.ton, 1) + ' т') +
-      row('Радиус гиба', 'Ri ≈ ' + fmt(r.Ri, 2) + ' мм · K = ' + fmt(r.K, 3)) +
-      row('Размеры заданы', { outer: 'по наружной стороне', inner: 'по внутренней стороне', mid: 'по средней линии' }[p.dimMode]) +
+      row('Усилие', fmt(r.force.F, 0) + ' кН/м · на длину ≈ ' + fmt(r.force.F * length / 9810, 1) + ' т') +
+      (flat ? row('Макс. длина гиба', fmt(length, 2) + ' мм') : row('Радиус гиба', 'Ri ≈ ' + fmt(r.Ri, 2) + ' мм · K = ' + fmt(r.K, 3)) +
+      row('Размеры заданы', { outer: 'по наружной стороне', inner: 'по внутренней стороне', mid: 'по средней линии' }[p.dimMode])) +
       '</table>' + (pm ? '<svg class="pc-profile" viewBox="' + pm.viewBox + '" preserveAspectRatio="xMidYMid meet">' + pm.html + '</svg>' : '') + '</div>';
-    h += '<div class="pc-h">Развёртка: линии гиба от начала заготовки (отрезок 1)</div>' + flatStrip(r.an) +
+    if (!flat) h += '<div class="pc-h">Развёртка: линии гиба от начала заготовки (отрезок 1)</div>' + flatStrip(r.an) +
       '<div class="pc-chips">' + r.an.bends.map(b => '<span>Г' + (b.i + 1) + ' — ' + fmt(b.pos, 2) + ' мм</span>').join('') + '</div>';
     h += '<div class="pc-h">Порядок гибов</div>' + (pl.ok ? '' : '<div class="pc-warn">Внимание: в этом порядке есть столкновения — см. отметки в таблице.</div>') +
-      '<table class="pc-steps"><thead><tr><th>Шаг</th><th>Гиб</th><th>Угол</th><th>Гибка</th><th>Действие</th><th>К упору</th><th>Упор, мм</th><th>✓</th></tr></thead><tbody>' +
-      pl.steps.map((s, k) => '<tr><td>' + (k + 1) + '</td><td>Г' + (s.bend + 1) + '</td><td>' + fmt(r.an.bends[s.bend].incl, 0) + '°</td><td class="pc-pic">' +
-        (PLAYER.sim ? stepPictures(PLAYER.sim, pl.steps.slice(0, k).map(x => x.bend), s) : '') + '</td><td>' +
-        (s.notes.map(esc).join('<br>') || 'то же положение') + (s.hits.length ? '<br><b>' + esc(hitList(s)) + '</b>' : '') + '</td><td>' + esc(s.backEdge) + '</td><td><b>' +
-        (s.stop != null ? fmt(s.stop, 1) : '—') + '</b></td><td class="pc-box"></td></tr>').join('') + '</tbody></table>';
+      '<table class="pc-steps"><thead><tr><th>Шаг</th><th>Гиб</th><th>Угол</th><th>Гибка</th><th>Действие</th>' + (flat ? '<th>Секции, мм</th>' : '<th>К упору</th>') + '<th>Упор, мм</th><th>✓</th></tr></thead><tbody>' +
+      pl.steps.map((s, k) => {
+        const angle = flat ? 180 - Math.abs(flat.angles[s.bend]) : r.an.bends[s.bend].incl;
+        const notes = flat ? flatStepNotes(s) : s.notes;
+        const pic = flat ? pictures[k] : stepPictures(PLAYER.sim, pl.steps.slice(0,k).map(x=>x.bend), s);
+        const setup = flat ? sectionList(s.setup) + ' = ' + s.setup.size + '<br>Линия ' + fmt(s.setup.width,2) : esc(s.backEdge);
+        const stop = flat ? s.gauge.fingers.map(f=>f.stop == null ? '—' : fmt(f.stop,1)).join(' / ') : s.stop == null ? '—' : fmt(s.stop,1);
+        return '<tr><td>' + (k+1) + '</td><td>Г' + (s.bend+1) + '</td><td>' + fmt(angle, flat ? 1 : 0) + '°</td><td class="pc-pic">' +
+          pic + '</td><td>' + (notes.map(esc).join('<br>') || 'то же положение') +
+          (s.hits.length ? '<br><b>' + esc(hitList(s)) + '</b>' : '') + '</td><td>' + setup +
+          '</td><td><b>' + stop + '</b></td><td class="pc-box"></td></tr>';
+      }).join('') + '</tbody></table>';
     const msgs = r.an.warnings.map(esc);
     if (msgs.length) h += '<div class="pc-h">Замечания</div><ul class="pc-notes">' + msgs.map(m => '<li>' + m + '</li>').join('') + '</ul>';
-    h += '<div class="pc-legend">На рисунках: слева оператор, справа задний упор. «Уложен» — лист на матрице, пуансон коснулся; «готово» — гиб выполнен. Жёлтая линия — сторона листа вверх, коричневая планка — упор с размером.</div>';
+    h += flat ? '<div class="pc-legend">«Уложен» — лист на матрице у задних упоров. «Готово» — положение сразу после гиба. Номера Г соответствуют развёртке.</div>' : '<div class="pc-legend">На рисунках: слева оператор, справа задний упор. «Уложен» — лист на матрице, пуансон коснулся; «готово» — гиб выполнен. Жёлтая линия — сторона листа вверх, коричневая планка — упор с размером.</div>';
     h += '<div class="pc-foot">Упор — расстояние от оси пуансона до заднего упора. Расчёт справочный: первый гиб проверяйте на образце.</div>';
     $('#printCard').innerHTML = h;
     // Дожидаемся загрузки логотипа перед печатью.
-    const img = $('#printCard img'), go = () => setTimeout(() => window.print(), 50);
-    if (img && !img.complete) { img.onload = go; img.onerror = go; } else go();
+    Promise.all($$('#printCard img').map(img => img.decode().catch(() => {})))
+      .then(() => setTimeout(() => window.print(), 50));
   }
 
   function bindSimTab() {
@@ -1552,7 +1609,8 @@
     const cur = r.punch, out = [], t0 = performance.now(), token = PLAYER.key;
     PLAYER.altsBusy = true;
     const score = pu => Math.abs((pu.H || 0) - (cur.H || 0)) / 40 + ((pu.angle && cur.angle) ? Math.abs(pu.angle - cur.angle) / 15 : 1);
-    const minIncl = Math.min.apply(null, r.an.bends.map(b => b.incl));
+    const flat = ST.part.flatDxf;
+    const minIncl = Math.min(...(flat ? flatModel.angles.map(a => 180 - Math.abs(a)) : r.an.bends.map(b => b.incl)));
     const cands = [{ pu: cur, m: !ST.part.punchMirror }].concat(
       allPunches().filter(pu => pu.id !== cur.id && !(pu.angle > minIncl + 0.5)).sort((a, b) => score(a) - score(b))
         .reduce((acc, pu) => acc.concat([{ pu, m: !!ST.part.punchMirror }, { pu, m: !ST.part.punchMirror }]), []));
@@ -1563,17 +1621,24 @@
       while (k < cands.length && out.length < 3 && performance.now() - ts < 30) {
         const c = cands[k++];
         if (out.some(o => o.id === c.pu.id)) continue;
-        const sim = new LG.Sim({ an: r.an, S: r.S, Ri: r.Ri, K: r.K, punch: c.pu, punchMirror: c.m, die: r.die, machine: ST.machine });
-        if (sim.plan(null, 400).ok) out.push({ id: c.pu.id, name: c.pu.name, mirror: c.m, H: c.pu.H, angle: c.pu.angle, same: c.pu.id === cur.id });
+        const Ri = flat && !(ST.part.riOverride > 0) ? Math.max(r.riTable, c.pu.r || 0) : r.Ri;
+        const sim = new LG.Sim({ an: r.an, S: r.S, Ri, K: r.K, punch: c.pu, punchMirror: c.m, die: r.die, machine: ST.machine });
+        if (alternativeFits(sim, flat)) out.push({ id: c.pu.id, name: c.pu.name, mirror: c.m, H: c.pu.H, angle: c.pu.angle, same: c.pu.id === cur.id });
       }
       const done = out.length >= 3 || k >= cands.length || performance.now() - t0 > 6000;
       if (!done) { setTimeout(slice, 0); return; }
       out.exhausted = k >= cands.length;
       PLAYER.alts = out; PLAYER.altsBusy = false;
-      if (ST.ui.tab === 'sim') renderBends();
       findDieAlternatives(r, token);
+      if (ST.ui.tab === 'sim') (flat ? renderFlatBends : renderBends)();
     };
     setTimeout(slice, 0);
+  }
+
+  function alternativeFits(sim, flat) {
+    if (!flat) return sim.plan(null, 400).ok;
+    if (sim.tipOpen - sim.dieTop < sim.ctx.S + 5) return false;
+    return LG.FlatFold.model(flat, sim, null, true).plan.ok;
   }
 
   // Второй приоритет — матрица. С текущим пуансоном перебираем матрицы по таблице гибов,
@@ -1581,7 +1646,10 @@
   function findDieAlternatives(r, token) {
     const out = [], t0 = performance.now();
     const Vmid = C.recommendedV(r.S);
-    const cands = suggestDies(r.S, Vmid, ST.part).list.filter(d => d.id !== r.die.id);
+    const flat = ST.part.flatDxf;
+    const length = flat ? Math.max(...flatModel.plan.steps.map(s=>s.setup.width)) : ST.part.L;
+    const minIncl = flat ? Math.min(...flatModel.angles.map(a => 180 - Math.abs(a))) : 180;
+    const cands = suggestDies(r.S, Vmid, {...ST.part, L:length}).list.filter(d => d.id !== r.die.id && d.angle <= minIncl + 0.5);
     PLAYER.dieAlts = []; PLAYER.dieAltsBusy = true; PLAYER.dieVmid = Vmid;
     let k = 0;
     const slice = () => {
@@ -1596,13 +1664,13 @@
         if (an.errors.length) continue;
         for (const m of [!!ST.part.punchMirror, !ST.part.punchMirror]) {
           const sim = new LG.Sim({ an, S: r.S, Ri, K, punch: r.punch, punchMirror: m, die: d, machine: ST.machine });
-          if (sim.plan(null, 400).ok) { out.push({ id: d.id, name: d.name, V: d.V, angle: d.angle, mirror: m }); break; }
+          if (alternativeFits(sim, flat)) { out.push({ id: d.id, name: d.name, V: d.V, angle: d.angle, mirror: m }); break; }
         }
       }
       const done = out.length >= 3 || k >= cands.length || performance.now() - t0 > 6000;
       if (!done) { setTimeout(slice, 0); return; }
       PLAYER.dieAlts = out; PLAYER.dieAltsBusy = false;
-      if (ST.ui.tab === 'sim') renderBends();
+      if (ST.ui.tab === 'sim') (flat ? renderFlatBends : renderBends)();
     };
     setTimeout(slice, 0);
   }
