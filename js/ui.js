@@ -597,10 +597,15 @@
       stepper('part', 'S', p.S, 0.1, 0.1, 2, 'Толщина S, мм') +
       '<div class="field"><label>Материал</label><select id="matSel">' +
       Object.keys(LG.MATERIALS).map(k => '<option value="' + k + '"' + (k === p.material ? ' selected' : '') + '>' + LG.MATERIALS[k].name + '</option>').join('') + '</select></div>' +
-      stepper('part', 'L', p.L, 10, 1, 0, 'Длина гиба (вдоль линии), мм') +
+      (p.flatDxf ? '' : stepper('part', 'L', p.L, 10, 1, 0, 'Длина гиба (вдоль линии), мм') +
       '<div class="field"><label>Размеры заданы</label><select id="dimSel">' +
       [['outer', 'по наружной стороне'], ['inner', 'по внутренней стороне'], ['mid', 'по средней линии']]
-        .map(o => '<option value="' + o[0] + '"' + (o[0] === p.dimMode ? ' selected' : '') + '>' + o[1] + '</option>').join('') + '</select></div>';
+        .map(o => '<option value="' + o[0] + '"' + (o[0] === p.dimMode ? ' selected' : '') + '>' + o[1] + '</option>').join('') + '</select></div>');
+
+    for (const id of ['addCard', 'profileHelp', 'segMirror', 'goBend', 'curInfo', 'segList']) {
+      $('#' + id).hidden = !!p.flatDxf;
+    }
+    document.body.classList.toggle('flat-part', !!p.flatDxf);
 
     let h = '<div class="seg-tabs wide2">' +
       '<button type="button" data-segmode="straight" class="' + (u.segMode === 'straight' ? 'on' : '') + '">Без угла</button>' +
@@ -624,7 +629,9 @@
     h += '<div class="field"><label>Строкой: длина, угол гиба, длина…</label><div class="row str-row">' +
       '<input type="text" id="segStr" autocomplete="off" placeholder="30 90 60 -90 30" value="' + esc(partToString()) + '"><button type="button" id="segStrGo">Построить</button></div>' +
       '<div class="muted small">Через пробел: длины, а между ними углы гибов, как на чертеже (90 — прямой угол). Угол с минусом — гиб в другую сторону.</div></div>';
-    h += '<div class="field"><label>Из чертежа</label><button type="button" id="partDxfBtn" title="Профиль детали: одна линия или замкнутый контур листа">' + ic('upload') + 'Контур детали из DXF</button></div>';
+    h += '<div class="field"><label>Из чертежа</label><div class="row">' +
+      '<button type="button" id="partDxfBtn" title="Поперечный профиль или развёртка со слоем CUT">' + ic('upload') + 'Импорт DXF</button>' +
+      '<button type="button" id="flatDxfBtn" class="ghost" title="Замкнутая развёртка без слоя CUT">Как развёртку</button></div></div>';
     $('#addExtra').innerHTML = h;
 
     $('#partsForm').innerHTML =
@@ -728,14 +735,14 @@
   // История правок детали: отмена и возврат. Следим за состоянием после каждой перерисовки,
   // подряд набираемые цифры одного размера считаем одним действием.
   const HIST = { undo: [], redo: [], cur: null, t: 0, typing: false };
-  const partSnap = () => JSON.stringify({ segs: ST.part.segs, S: ST.part.S, dimMode: ST.part.dimMode });
+  const partSnap = () => JSON.stringify({ segs: ST.part.segs, flatDxf: ST.part.flatDxf || null, S: ST.part.S, dimMode: ST.part.dimMode });
   function histReset() { HIST.undo = []; HIST.redo = []; HIST.cur = null; HIST.typing = false; }
   function histTrack() {
     const now = partSnap();
     if (HIST.cur == null) { HIST.cur = now; return; }
     if (now === HIST.cur) return;
     const a = JSON.parse(HIST.cur), b = JSON.parse(now), t = Date.now();
-    const numsOnly = a.segs.length === b.segs.length && a.dimMode === b.dimMode && a.segs.every((s, i) => s.dir === b.segs[i].dir);
+    const numsOnly = !a.flatDxf && !b.flatDxf && a.segs.length === b.segs.length && a.dimMode === b.dimMode && a.segs.every((s, i) => s.dir === b.segs[i].dir);
     if (!(numsOnly && HIST.typing && t - HIST.t < 1500)) { HIST.undo.push(HIST.cur); if (HIST.undo.length > 100) HIST.undo.shift(); }
     HIST.typing = numsOnly; HIST.t = t; HIST.redo = []; HIST.cur = now;
   }
@@ -752,6 +759,7 @@
     histTrack();
     $('#segUndo').disabled = !HIST.undo.length; $('#segRedo').disabled = !HIST.redo.length;
     const ss = $('#segStr'); if (ss && document.activeElement !== ss) ss.value = partToString();
+    if (ST.part.flatDxf) { renderFlatDxf(ST.part.flatDxf); return; }
     renderSegList();
     if (ST.ui.segMode === 'angle') refreshDir();
     const r = resolve(), an = r.an, p = ST.part;
@@ -770,6 +778,25 @@
       if (msgs.length) h += '<ul class="msgs">' + msgs.join('') + '</ul>';
     }
     $('#partCalc').innerHTML = h;
+  }
+
+  function renderFlatDxf(flat) {
+    const svg = $('#profileSvg');
+    const bounds = G.bounds(flat.contours.flat());
+    const width = bounds.x1 - bounds.x0, height = bounds.y1 - bounds.y0;
+    const fs = Math.max(width, height) / 36;
+    const view = flat.bends.reduce((b, line) => G.bounds(line, b), Object.assign({}, bounds));
+    svg.setAttribute('viewBox', SV.viewBox(view, fs * 3));
+    svg.innerHTML = '<path class="flat-dxf-cut" fill-rule="evenodd" d="' +
+      flat.contours.map(loop => SV.d(loop, true)).join(' ') + '"/>' +
+      flat.bends.map(([a, b], i) =>
+        SV.line(a, b, 'flat-dxf-bend') +
+        SV.text({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, 'Г' + (i + 1), fs, 'flat-dxf-label')
+      ).join('');
+    $('#partCalc').innerHTML = '<div class="flat-v">Габариты: <b>' + fmt(width, 2) + ' × ' + fmt(height, 2) + ' мм</b></div>' +
+      '<p class="muted small">Контуры реза: ' + flat.contours.length + ' · Линии гиба: ' + flat.bends.length + '</p>' +
+      (flat.bends.length ? '<div class="chips">' + flat.bends.map(([a, b], i) =>
+        '<span class="chip">Г' + (i + 1) + ' · ' + fmt(G.dist(a, b), 2) + ' мм</span>').join('') + '</div>' : '');
   }
 
   // Полоска развёртки с линиями гиба
@@ -907,11 +934,17 @@
     const root = $('#tab-part');
     bindProfileDrag($('#profileSvg'));
     $('#partDxf').addEventListener('change', e => readDxf(e.target, (text, name) => {
-      const r = LG.DXF.part(text), p = ST.part;
+      const r = LG.DXF.part(text, e.target.dataset.mode === 'flat'), p = ST.part;
       if (r.error) { toast(r.error, 8000); return; }
-      p.segs = r.segs; p.order = null; ST.ui.cursor = null; p.name = name;
+      p.flatDxf = r.flatDxf || null;
+      p.segs = r.segs || []; p.order = null; ST.ui.cursor = null; p.name = name;
       if (r.S) { p.S = r.S; p.dimMode = r.dimMode; }
       saveAll(); renderPartTab();
+      if (p.flatDxf) {
+        toast('Развёртка загружена: линий гиба ' + p.flatDxf.bends.length);
+        $('#profileSvg').scrollIntoView({ block: 'center' });
+        return;
+      }
       toast('Из чертежа: отрезков ' + r.segs.length + ', гибов ' + (r.segs.length - 1) + (r.S ? ', толщина ' + fmt(r.S, 2) + ' мм (размеры по средней линии)' : ' — проверьте толщину и то, как заданы размеры'), 6000);
     }));
     root.addEventListener('keydown', e => { if (e.target.id === 'segStr' && e.key === 'Enter') $('#segStrGo').click(); });
@@ -929,8 +962,9 @@
       else if (e.target.dataset.segdir != null) { p.segs[+e.target.dataset.segdir].dir = +e.target.value; p.order = null; }
       else if (id === 'presetSel') {
         const pr = PRESETS[e.target.value];
-        if (pr) { p.segs = pr.map(x => ({ dir: x[0], len: x[1] })); p.order = null; ST.ui.cursor = null; }
-        e.target.value = '';
+        if (!pr) return;
+        p.flatDxf = null; p.segs = pr.map(x => ({ dir: x[0], len: x[1] })); p.order = null; ST.ui.cursor = null;
+        saveAll(); renderPartTab(); return;
       } else return;
       saveAll(); renderPartOutputs();
     });
@@ -962,6 +996,12 @@
         PLAYER.play();
         return;
       }
+      const dxfButton = q('#partDxfBtn, #flatDxfBtn');
+      if (dxfButton) {
+        $('#partDxf').dataset.mode = dxfButton.id === 'flatDxfBtn' ? 'flat' : 'auto';
+        $('#partDxf').click();
+        return;
+      }
       switch (t.id) {
         case 'segUndo': histGo(true); break;
         case 'segRedo': histGo(false); break;
@@ -972,14 +1012,13 @@
         case 'segStrGo': {
           const r = partFromString($('#segStr').value);
           if (r.error) { toast(r.error, 5000); break; }
-          p.segs = r.segs; p.order = null; ST.ui.cursor = null;
-          saveAll(); renderPartOutputs(); $('#segStr').value = partToString();
+          p.flatDxf = null; p.segs = r.segs; p.order = null; ST.ui.cursor = null;
+          saveAll(); renderPartTab();
           toast('Построено: отрезков ' + r.segs.length + ', гибов ' + (r.segs.length - 1)); break;
         }
-        case 'partDxfBtn': $('#partDxf').click(); break;
         case 'segClear':
-          if (!p.segs.length || !armed(t, 'Точно очистить?')) return;
-          p.segs = []; p.order = null; ST.ui.cursor = null; saveAll(); renderPartOutputs(); break;
+          if ((!p.flatDxf && !p.segs.length) || !armed(t, 'Точно очистить?')) return;
+          p.flatDxf = null; p.segs = []; p.order = null; ST.ui.cursor = null; saveAll(); renderPartTab(); break;
         case 'partSave': {
           const name = ($('#partName').value || 'Деталь').trim();
           p.name = name;
@@ -1029,7 +1068,11 @@
   }
 
   function renderSimTab() {
-    const p = ST.part, r = resolve();
+    const p = ST.part;
+    $('#flatSimNote').hidden = !p.flatDxf;
+    $('#profileSim').hidden = !!p.flatDxf;
+    if (p.flatDxf) return;
+    const r = resolve();
     const mid = r.opts[Math.round((r.opts.length - 1) / 2)];
     const vSel = '<div class="field"><label>Раскрытие V по таблице</label><div class="vinfo">S=' + fmt(r.S, 2) + ' → среднее <b>' + fmt(mid.F, 0) +
       ' кН/м</b> → <b>V' + mid.V + '</b>' + (!r.auto && Math.abs(r.V - mid.V) > 0.3 ? ' <span class="warn">(выбрана матрица V' + fmt(r.V, 1) + ')</span>' : '') + '</div></div>';
@@ -1267,6 +1310,7 @@
   }
 
   function bindSimTab() {
+    $('#backToFlat').addEventListener('click', () => setTab('part'));
     const root = $('#tab-sim');
     root.addEventListener('change', e => {
       const id = e.target.id, p = ST.part;
