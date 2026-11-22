@@ -85,6 +85,9 @@
       order: Array.isArray(vp.order) ? vp.order.map(Number) : null, punchMirror: !!vp.punchMirror,
       punchId: String(vp.punchId || ''), dieId: String(vp.dieId || 'auto'), riOverride: numOr(vp.riOverride, null), kOverride: numOr(vp.kOverride, null)
     });
+    const fd=vp.flatDxf, pt=p=>p && Number.isFinite(p.x) && Number.isFinite(p.y);
+    if(fd && Array.isArray(fd.contours) && fd.contours.every(c=>Array.isArray(c)&&c.length>=3&&c.every(pt)) &&
+       Array.isArray(fd.bends) && fd.bends.every(l=>Array.isArray(l)&&l.length===2&&l.every(pt))) ST.part.flatDxf=fd;
     const okOutline = x => Array.isArray(x.outline) && x.outline.length > 2 && x.outline.length < 2000 && x.outline.every(p => Array.isArray(p) && isFinite(+p[0]) && isFinite(+p[1]));
     const vpu = VIEW.punch, vdi = VIEW.die;
     if (vpu && vpu.id && (vpu.type !== 'custom' ? vpu.Hb > 0 && vpu.W > 0 : okOutline(vpu) && vpu.H > 0 && vpu.Hb > 0)) ST.punches = ST.punches.filter(x => x.id !== vpu.id).concat([vpu]);
@@ -280,7 +283,7 @@
   function setTab(t, autoplay = false) {
     ST.ui.tab = t; saveAll();
     PLAYER.pause();
-    stopFlatPlayback();
+    flatRequest++;
     document.body.dataset.tab = t;   // для стилей: на телефоне у конструктора своя нижняя панель
     $$('.tabs button').forEach(b => { b.classList.toggle('on', b.dataset.tab === t); if (b.dataset.tab === t && b.scrollIntoView) b.scrollIntoView({ block: 'nearest', inline: 'center' }); });
     $$('.tab').forEach(s => { s.hidden = s.id !== 'tab-' + t; });
@@ -1001,7 +1004,7 @@
         if (p.flatDxf) {
           if (!p.flatDxf.bends.length) { toast('В развёртке нет линий BEND'); return; }
           setTab('sim', true);
-          $('#flatSimNote').scrollIntoView({ behavior: 'smooth', block: 'start' });
+          $('#simCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
           return;
         }
         const r = resolve();
@@ -1083,73 +1086,64 @@
       dieListHTML({ q: simPick.q.die, sel: p.dieId, attr: 'data-sim-die', open: openSet, kp: 'sd:' });
   }
 
-  let flatView, flatScene, flatRequest = 0, flatFrame = 0;
-  function stopFlatPlayback() {
-    cancelAnimationFrame(flatFrame); flatFrame = 0; flatRequest++;
-    $('#flatPlay').textContent = 'Пуск';
+  let flatView, flatScene, flatModel, flatRequest = 0, flatSpatial = true;
+  function sectionList(setup) {
+    return setup.pieces.map(p => p.length).join(' + ') || 'нет сборки';
   }
-  function renderFlatSimulation(p, autoplay) {
-    stopFlatPlayback();
-    const request = flatRequest;
-    flatScene?.clear(); flatScene = null;
-    $('#flatStage').hidden = true; $('#flatPlayback').hidden = true;
-    $('#flatStep').textContent = ''; $('#flatPlan').textContent = 'Подготовка последовательности…';
-    const select = (id,title,items,value) => '<label>' + title + ' <select id="' + id + '">' +
-      items.map(item => '<option value="' + esc(item.id) + '"' + (item.id === value ? ' selected' : '') + '>' + esc(item.name) + '</option>').join('') + '</select></label>';
-    $('#flatTools').innerHTML = select('flatPunch','Пуансон',allPunches(),p.punchId) +
-      select('flatDie','Матрица',[{id:'auto',name:'Авто'},...allDies()],p.dieId);
-    ensureThree(() => {
-      if (request !== flatRequest || ST.ui.tab !== 'sim') return;
+  function flatTable(model, printing=false) {
+    const steps = model.plan.steps;
+    return '<div class="tbl-wrap"><table class="bends"><thead><tr><th>Шаг</th><th>Гиб</th><th>Угол поворота полки</th><th>Линия, мм</th><th>Секции пуансона, мм</th><th>Статус</th>'+ (printing?'':'<th></th>') +'</tr></thead><tbody>' +
+      steps.map((s,k) => {
+        const first=s.hits.length ? Math.min(...s.hits.map(h=>h.f)) : 0;
+        const time=k+0.4+0.42*Math.acos(1-2*first)/Math.PI;
+        const gap=s.setup.width-s.setup.size;
+        return '<tr class="'+(s.hits.length?'row-bad':'')+'"><td>'+(printing?k+1:'<button class="link" data-flat-time="'+time+'">'+(k+1)+'</button>')+'</td><td>Г'+(s.bend+1)+'</td><td>'+fmt(model.angles[s.bend],1)+'°</td><td>'+fmt(s.setup.width,2)+'</td><td>'+sectionList(s.setup)+' = '+s.setup.size+
+          (gap>0.01?'<div class="warn small">Короче линии на '+fmt(gap,2)+' мм</div>':'')+'</td><td>'+
+          (s.hits.length?'<span class="bad">'+hitList(s)+'</span>':'<span class="good">Без удара</span>')+'</td>'+(printing?'':'<td class="nowrap">'+
+          [-1,1].map(d=>'<button class="ghost sm" data-mv="'+d+'" data-k="'+k+'" aria-label="'+(d<0?'Раньше':'Позже')+'">'+(d<0?'↑':'↓')+'</button>').join('')+'</td>')+'</tr>';
+      }).join('')+'</tbody></table></div>';
+  }
+  function renderFlatSimulation(p,autoplay) {
+    PLAYER.pause();
+    const request=++flatRequest;
+    PLAYER.key=null; PLAYER.plan=null; PLAYER.sim=null;
+    flatScene?.clear(); flatScene=null; flatModel=null;
+    $('#simHud').textContent='Подготовка последовательности…';
+    $('#bendOut').textContent=''; $('#calcOut').textContent=''; $('#sim3dLen').textContent='';
+    ensureThree(()=>{
+      if(request!==flatRequest || ST.ui.tab!=='sim') return;
       try {
-        if (typeof THREE === 'undefined') throw Error('Не загрузилась библиотека 3D. Откройте вкладку повторно.');
-        const r = resolve();
-        const sim = new LG.Sim({ an:r.an, S:r.S, Ri:r.Ri, K:r.K, punch:r.punch, punchMirror:p.punchMirror, die:r.die, machine:ST.machine });
-        const model = LG.FlatFold.model(p.flatDxf,sim);
-        $('#flatStage').hidden = false;
+        if(typeof THREE==='undefined') throw Error('Не загрузилась библиотека 3D.');
+        const r=R=resolve();
+        const sim=new LG.Sim({an:r.an,S:r.S,Ri:r.Ri,K:r.K,punch:r.punch,punchMirror:p.punchMirror,die:r.die,machine:ST.machine});
+        const model=LG.FlatFold.model(p.flatDxf,sim,p.order);
         flatView ||= new LG.View3D($('#flatStage'));
-        flatScene = LG.FlatFold.scene(flatView,model,sim,(msg,hit) => {
-          $('#flatStep').textContent = msg;
-          $('#flatStep').classList.toggle('bad', hit);
+        flatScene=LG.FlatFold.scene(flatView,model,sim,(msg,hit)=>{
+          $('#simHud').textContent=msg;
+          $('#simHud').classList.toggle('bad',hit);
         });
-        const steps = model.plan.steps;
-        const status = model.plan.ok ? '<b class="good">Порядок подобран, ударов не обнаружено</b>' :
-          '<div class="alert"><b>' + ic('block', 'lg') + 'Без удара согнуть не получается</b>' +
-          '<div>Для выбранного инструмента среди проверенных установок не найден порядок без столкновений.</div></div>';
-        $('#flatPlan').innerHTML = status + '<div class="chips">' + steps.map((s,k) => {
-          const first = s.hits.length ? Math.min(...s.hits.map(h=>h.f)) : 0;
-          const time = k + 0.4 + 0.42 * Math.acos(1 - 2 * first) / Math.PI;
-          return '<button type="button" data-flat-time="' + time + '" class="sm ' + (s.hits.length ? 'bad' : 'good') +
-            '">Шаг ' + (k+1) + ' · Г' + (s.bend+1) + ' · ' + (s.hits.length ? s.hits.map(h=>esc(h.tool)).join(', ') : 'ок') + '</button>';
-        }).join('') + '</div>';
-        const slider=$('#flatTime'); slider.max=steps.length; slider.value=0;
-        $('#flatPlayback').hidden=false;
-        if (autoplay) playFlat();
-      } catch(err) {
-        $('#flatStage').hidden=true; $('#flatPlan').textContent=err.message;
-      }
+        flatModel=model; PLAYER.plan=model.plan; PLAYER.sim=sim; PLAYER.t=0;
+        $('#bendOut').innerHTML=(model.plan.ok?'<p class="good">В выбранной последовательности ударов не обнаружено</p>':
+          '<div class="alert"><b>Для выбранного инструмента есть ограничения</b><div>Проверьте отмеченные шаги и выбранный инструмент.</div></div>')+
+          (p.order?'<button id="orderAuto" class="sm">Подобрать авто</button>':'')+flatTable(model)+
+          '<p class="muted small">Длину сборки и разницу с линией гиба проверяйте по шагам. Модель использует прямые шарниры и не проверяет столкновения полок между собой.</p>';
+        const maxLength=Math.max(...model.plan.steps.map(s=>s.setup.width));
+        $('#calcOut').innerHTML='<div class="kv">'+kv('Толщина листа',fmt(r.S,2)+' мм')+kv('Макс. длина гиба',fmt(maxLength,2)+' мм')+
+          kv('Усилие на эту длину',fmt(r.force.F*maxLength/1000,1)+' кН')+gapRow(r)+'</div>';
+        drawFrame(); if(autoplay) PLAYER.play();
+      } catch(err) {$('#simHud').textContent=err.message;$('#simHud').classList.add('bad');}
     });
   }
-  function playFlat() {
-    if(flatFrame) {stopFlatPlayback();return;}
-    if(!flatScene) return;
-    const slider=$('#flatTime'), total=+slider.max;
-    if(+slider.value>=total) slider.value=0;
-    const start=performance.now()-Number(slider.value)*4000;
-    $('#flatPlay').textContent='Пауза';
-    function tick(now){
-      const t=Math.min(total,(now-start)/4000);
-      slider.value=t;flatScene.draw(t);
-      if(t<total) flatFrame=requestAnimationFrame(tick);
-      else stopFlatPlayback();
-    }
-    flatFrame=requestAnimationFrame(tick);
-  }
-
   function renderSimTab(autoplay = false) {
-    const p = ST.part;
-    $('#flatSimNote').hidden = !p.flatDxf;
-    $('#profileSim').hidden = !!p.flatDxf;
-    if (p.flatDxf) { renderFlatSimulation(p, autoplay); return; }
+    const p = ST.part, flat=!!p.flatDxf;
+    $('#flatStage').hidden=!flat;
+    $('#simSvg').toggleAttribute('hidden',flat || !!PLAYER.d3);
+    $('#sim3d').hidden=flat || !PLAYER.d3;
+    $('.mag-ov').hidden=flat || !!PLAYER.d3;
+    $('#simZoom').hidden=flat || !!PLAYER.d3;
+    $('#sim3dLen').hidden=!flat && !PLAYER.d3;
+    $('#sim3dBtn').textContent=(flat?flatSpatial:PLAYER.d3)?'2D':'3D';
+    $('#simHud').classList.remove('bad');
     const r = resolve();
     const mid = r.opts[Math.round((r.opts.length - 1) / 2)];
     const vSel = '<div class="field"><label>Раскрытие V по таблице</label><div class="vinfo">S=' + fmt(r.S, 2) + ' → среднее <b>' + fmt(mid.F, 0) +
@@ -1164,14 +1158,15 @@
         (r.die.id !== 'auto' ? esc(r.die.name) + ' · ' : '') + 'V' + fmt(r.V, 1) + ' · ' + fmt(r.die.angle, 0) + '°</span></span>'
         : dieThumb(r.die) + '<span><b>' + esc(r.die.name) + '</b><span class="muted small">V' + fmt(r.die.V, 1) + ' · ' + fmt(r.die.angle, 0) + '° · H' + fmt(r.die.H, 0) + '</span></span>') +
       vSel +
-      stepper('part', 'L', p.L, 10, 1, 0, 'Длина гиба (вдоль линии), мм', 'span2') +
+      (flat ? '' : stepper('part', 'L', p.L, 10, 1, 0, 'Длина гиба (вдоль линии), мм', 'span2') +
       stepper('part', 'riOverride', p.riOverride || 0, 0.1, 0, 2, 'Ri вручную, мм (0 — авто)') +
-      stepper('part', 'kOverride', p.kOverride || 0, 0.01, 0, 2, 'K-фактор вручную (0 — авто)');
-    renderSimOutputs();
+      stepper('part', 'kOverride', p.kOverride || 0, 0.01, 0, 2, 'K-фактор вручную (0 — авто)'));
+    if (flat) renderFlatSimulation(p,autoplay); else renderSimOutputs();
   }
 
   function renderSimOutputs() {
     if (ST.ui.tab !== 'sim') return;
+    if (ST.part.flatDxf) {renderFlatSimulation(ST.part,false);return;}
     R = resolve();
     renderCalc();
     buildPlan();
@@ -1278,12 +1273,13 @@
     const slim = o => { const c = clone(o); delete c.raw; delete c.rk; delete c.mir; return c; };
     const d = { v: 1, part: { name: p.name, S: p.S, L: p.L, material: p.material, dimMode: p.dimMode, segs: p.segs, order: p.order, punchMirror: !!p.punchMirror,
       punchId: r.punch ? r.punch.id : p.punchId, dieId: r.auto ? 'auto' : r.die.id, riOverride: p.riOverride || null, kOverride: p.kOverride || null }, machine: ST.machine };
+    if (p.flatDxf) d.part.flatDxf=p.flatDxf;
     if (r.punch && !isCat(r.punch.id)) d.punch = slim(r.punch);
     if (!r.auto && !isCat(r.die.id)) d.die = slim(r.die);
     return location.origin + location.pathname + '#g=' + b64e(d);
   }
   function sharePanel() {
-    if (!ST.part.segs.length) { toast('Сначала постройте деталь'); return; }
+    if (!ST.part.segs.length && !ST.part.flatDxf) { toast('Сначала постройте деталь'); return; }
     const url = shareUrl();
     $('#simPanel').hidden = false;
     $('#simPanel').innerHTML = '<div class="row between"><b>Ссылка на эту гибку</b><button type="button" class="ghost sm" id="panelClose" aria-label="Закрыть">' + ic('x') + '</button></div>' +
@@ -1299,13 +1295,16 @@
     const p = ST.part, r = R || resolve();
     if (!r.punch) { toast('Нет пуансона'); return; }
     const mat = LG.MATERIALS[p.material].name.split(',')[0];
-    const bends = r.an.bends.map(b => fmt(b.incl, 0) + '°').join(', ');
+    const steps = p.flatDxf && flatModel?.plan.steps;
+    const length = steps ? Math.max(...steps.map(s => s.setup.width)) : p.L;
+    const sections = steps ? steps.map(s => 'Г' + (s.bend + 1) + ' (' + sectionList(s.setup) + ' мм)').join(', ') : '';
+    const bends = steps ? steps.map(s => fmt(flatModel.angles[s.bend], 0) + '°').join(', ') : r.an.bends.map(b => fmt(b.incl, 0) + '°').join(', ');
     const txt = 'Здравствуйте! Нужен инструмент для листогиба:\n' +
-      '— Пуансон: ' + r.punch.name + ' (A ' + fmt(r.punch.H, 1) + ' мм' + (r.punch.angle ? ', угол ' + fmt(r.punch.angle, 0) + '°' : '') + ', R ' + fmt(r.punch.r, 2) + '), длина ' + fmt(r.punch.L || p.L, 0) + ' мм\n' +
+      '— Пуансон: ' + r.punch.name + ' (A ' + fmt(r.punch.H, 1) + ' мм' + (r.punch.angle ? ', угол ' + fmt(r.punch.angle, 0) + '°' : '') + ', R ' + fmt(r.punch.r, 2) + '), длина ' + fmt(steps ? Math.max(...steps.map(s=>s.setup.size)) : r.punch.L || p.L, 0) + ' мм\n' + (sections ? '— Сборки по шагам: ' + sections + '\n' : '') +
       '— Матрица: ' + (r.die.id === 'auto' ? 'V' + fmt(r.V, 1) + ', ' + fmt(r.die.angle, 0) + '°' : r.die.name + ' (V' + fmt(r.V, 1) + ', ' + fmt(r.die.angle, 0) + '°)') + '\n' +
-      'Деталь: ' + (p.name || 'без названия') + ' — ' + mat + ' ' + fmt(r.S, 2) + ' мм, длина гиба ' + fmt(p.L, 0) + ' мм' +
-      (bends ? ', гибы: ' + bends : '') + ', усилие ≈ ' + fmt(r.ton, 1) + ' т.\n' +
-      (p.segs.length ? 'Гибка: ' + shareUrl() + '\n' : '') + 'Прошу сообщить наличие и стоимость.';
+      'Деталь: ' + (p.name || 'без названия') + ' — ' + mat + ' ' + fmt(r.S, 2) + ' мм, длина гиба ' + fmt(length, 1) + ' мм' +
+      (bends ? ', гибы: ' + bends : '') + ', усилие ≈ ' + fmt(r.force.F * length / 9810, 1) + ' т.\n' +
+      (p.segs.length || steps ? 'Гибка: ' + shareUrl() + '\n' : '') + 'Прошу сообщить наличие и стоимость.';
     $('#simPanel').hidden = false;
     $('#simPanel').innerHTML = '<div class="row between"><b>Заявка в wirken</b><button type="button" class="ghost sm" id="panelClose" aria-label="Закрыть">' + ic('x') + '</button></div>' +
       '<p class="muted small">Текст можно поправить. <b>Telegram</b> откроет чат с номером +7 812 612 28 50 и подставит текст — останется нажать «Отправить». ' +
@@ -1352,6 +1351,11 @@
 
   // Карта гибки для печати или сохранения в PDF: всё, что нужно оператору, на одном листе
   function printCard() {
+    if(ST.part.flatDxf) {
+      if(!flatModel) return;
+      $('#printCard').innerHTML='<h1>Карта гибки · '+esc(ST.part.name||'Деталь')+'</h1><p>'+esc(R.punch.name)+' · '+esc(R.die.name)+' · S '+fmt(R.S,2)+' мм</p>'+flatTable(flatModel,true);
+      window.print();return;
+    }
     const p = ST.part, r = R || resolve(), pl = PLAYER.plan;
     if (!pl || !pl.steps.length) { toast('Сначала нужна деталь с гибами без ошибок'); return; }
     const pm = profileMarkup(r, false), mat = LG.MATERIALS[p.material].name.split(',')[0];
@@ -1388,19 +1392,6 @@
   }
 
   function bindSimTab() {
-    $('#flatPlan').addEventListener('click', e => {
-      const button = e.target.closest('[data-flat-time]');
-      if (!button || !flatScene) return;
-      stopFlatPlayback();
-      $('#flatTime').value = button.dataset.flatTime;
-      flatScene.draw(+button.dataset.flatTime);
-    });
-    $('#flatPlay').addEventListener('click', playFlat);
-    $('#flatTime').addEventListener('input', e => {stopFlatPlayback();flatScene?.draw(+e.target.value);});
-    $('#flatTools').addEventListener('change', e => {
-      ST.part[e.target.id === 'flatPunch' ? 'punchId' : 'dieId'] = e.target.value;saveAll();renderSimTab();
-    });
-    $('#backToFlat').addEventListener('click', () => setTab('part'));
     const root = $('#tab-sim');
     root.addEventListener('change', e => {
       const id = e.target.id, p = ST.part;
@@ -1420,6 +1411,8 @@
     });
     root.addEventListener('click', e => {
       const p = ST.part;
+      const jump=e.target.closest('[data-flat-time]');
+      if(jump && flatModel){PLAYER.pause();PLAYER.seek(Number(jump.dataset.flatTime)*PLAYER.dur);return;}
       const pb = e.target.closest('[data-picker-btn]');
       if (pb) {
         const k = pb.dataset.pickerBtn;
@@ -1498,7 +1491,10 @@
     }, { passive: false });
     $('#simSvg').addEventListener('dblclick', () => setMag(1));
     $$('.mag-btn').forEach(bt => bt.addEventListener('click', () => setMag(PLAYER.mag * +bt.dataset.mag)));
-    $('#sim3dBtn').addEventListener('click', () => set3d(!PLAYER.d3));
+    $('#sim3dBtn').addEventListener('click', () => {
+      if (!ST.part.flatDxf) {set3d(!PLAYER.d3);return;}
+      flatSpatial=!flatSpatial; $('#sim3dBtn').textContent=flatSpatial?'2D':'3D';drawFrame();
+    });
     $('#simZoom').addEventListener('change', e => {
       PLAYER.zoom = e.target.value;
       if (PLAYER.sim && PLAYER.plan) PLAYER.view = computeView(PLAYER.sim, PLAYER.plan);
@@ -1712,7 +1708,7 @@
   }
   // 3D: копия картинки с холста three.js
   function recFrame3d() {
-    const cv = $('#sim3d canvas'), c = REC.canvas;
+    const cv = $(ST.part.flatDxf?'#flatStage canvas':'#sim3d canvas'), c = REC.canvas;
     if (!cv || !c) return;
     if (c.width !== cv.width || c.height !== cv.height) { c.width = cv.width; c.height = cv.height; }
     const g = c.getContext('2d');
@@ -1810,8 +1806,8 @@
       const is3d = mode === '3d', clearFlyby = () => { REC.flyby = null; };
       REC.mode = mode;
       PLAYER.pause(); PLAYER.t = 0;
-      REC.flyby = is3d && sim3d.cameraInput === REC.countdownCameraInput ? { input: sim3d.cameraInput } : null;
-      PLAYER.recDraw = is3d ? recFrame3d : recFrame2d; drawFrame();
+      REC.flyby = is3d && (ST.part.flatDxf?flatView:sim3d).cameraInput === REC.countdownCameraInput ? { input: REC.countdownCameraInput } : null;
+      PLAYER.recDraw = (is3d || ST.part.flatDxf) ? recFrame3d : recFrame2d; drawFrame();
       let rec;
       try { rec = new MediaRecorder(REC.canvas.captureStream(30), mime ? { mimeType: mime, videoBitsPerSecond: 5e6 } : undefined); }
       catch (err) { PLAYER.recDraw = null; clearFlyby(); recCancel(); toast('Запись видео не запустилась: ' + err.message, 5000); return; }
@@ -1834,11 +1830,11 @@
     };
     // Отсчёт 3 секунды: за это время можно выставить вид так, как он должен быть в видео
     const go = () => {
-      if (!document.createElement('canvas').captureStream || typeof MediaRecorder === 'undefined' || (mode === '3d' && !$('#sim3d canvas'))) {
+      if (!document.createElement('canvas').captureStream || typeof MediaRecorder === 'undefined' || (mode === '3d' && !$(ST.part.flatDxf?'#flatStage canvas':'#sim3d canvas'))) {
         toast('Этот браузер не умеет записывать видео — воспользуйтесь записью экрана телефона', 5000); return;
       }
       PLAYER.pause(); PLAYER.t = 0; drawFrame();
-      if (mode === '3d') REC.countdownCameraInput = sim3d.cameraInput;
+      if (mode === '3d') REC.countdownCameraInput = (ST.part.flatDxf?flatView:sim3d).cameraInput;
       const btn = $('#recBtn'); btn.innerHTML = ic('x') + 'Отмена'; btn.classList.add('rec');
       let ov = $('#recCount');
       if (!ov) { ov = document.createElement('div'); ov.id = 'recCount'; ov.className = 'rec-count'; $('.sim-wrap').appendChild(ov); }
@@ -1851,6 +1847,7 @@
       };
       tick();
     };
+    if (ST.part.flatDxf) { flatSpatial=mode==='3d'; $('#sim3dBtn').textContent=flatSpatial?'2D':'3D';go();return; }
     if (mode === '3d') { if (PLAYER.d3 && sim3d && sim3d.ok) go(); else set3d(true, go); }
     else { if (PLAYER.d3) set3d(false); go(); }
   }
@@ -2034,6 +2031,21 @@
 
   function drawFrame() {
     const svg = $('#simSvg'), hud = $('#simHud'), slider = $('#simSlider');
+    if (ST.part.flatDxf) {
+      if (!flatScene || !flatModel || !PLAYER.plan) return;
+      const time=PLAYER.t/PLAYER.dur;
+      const step=PLAYER.plan.steps[Math.min(Math.floor(time),PLAYER.plan.steps.length-1)];
+      if (REC.flyby && flatSpatial && REC.flyby.input===flatView.cameraInput) {
+        const size=flatModel.span, y=PLAYER.sim.dieTop;
+        REC.flyby.bounds ||= new THREE.Box3(new THREE.Vector3(-size/2,y-size/3,-size/2),new THREE.Vector3(size/2,y+size/2,size/2));
+        frameFlyby(flatView,REC.flyby,PLAYER.t/PLAYER.total(),PLAYER.sim,flatModel.toolLength);
+      }
+      flatScene.draw(time,flatSpatial);
+      $('#sim3dLen').textContent='Г'+(step.bend+1)+' · Пуансон '+sectionList(step.setup)+' мм · сборка '+step.setup.size+' мм';
+      slider.value=Math.round(1000*PLAYER.t/PLAYER.total());
+      if(PLAYER.recDraw) PLAYER.recDraw();
+      return;
+    }
     const sim = PLAYER.sim, plan = PLAYER.plan;
     if (!sim || !plan || !plan.steps.length) {
       svg.innerHTML = '';

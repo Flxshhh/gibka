@@ -99,7 +99,21 @@
   }
 
   const vector=p=>new THREE.Vector3(p.x,0,p.y);
-  function model(flat, sim) {
+  // Два цельных инструмента и один комплект секций 805 мм. Каждую
+  // физическую секцию можно использовать лишь один раз в одной установке.
+  const stock = [835, 415, 370, 100, 100, 100, 50, 40, 20, 15, 10];
+  const assemblies = new Map([[0, []]]);
+  for (const length of stock) {
+    for (const [sum, pieces] of [...assemblies]) {
+      const next = sum + length;
+      if (!assemblies.has(next) || assemblies.get(next).length > pieces.length + 1) {
+        assemblies.set(next, [...pieces, length]);
+      }
+    }
+  }
+  const sizes = [...assemblies.keys()].filter(Boolean).sort((a,b)=>b-a);
+
+  function model(flat, sim, order = null) {
     const lines=axes(flat.bends), {panels,hinges}=topology(flat,lines);
     const angles = lines.map((_, i) => flat.angles?.[i] ?? 90);
     if (angles.some(a => !Number.isFinite(a) || Math.abs(a) < 0.1 || Math.abs(a) > 175)) {
@@ -139,6 +153,26 @@
     const centers = Array.from({ length: count }, (_, i) => (i - (count - 1) / 2) * 200);
     const full = [[-toolLength / 2, toolLength / 2]];
     const mounts = centers.map(z => [z - 75, z + 75]);
+    // Берём рабочий отрезок в материале, даже если разметка BEND в DXF длиннее.
+    const seats = hinges.map((hinge,i) => {
+      const [a,b] = lines[i], length = distance(a,b);
+      const project = p => ((p.x-a.x)*(b.x-a.x)+(p.y-a.y)*(b.y-a.y))/length - length/2;
+      const ends = hinge.segments.flat().map(project);
+      const lo = Math.min(...ends), hi = Math.max(...ends);
+      const width = hi-lo;
+      const fitting = sizes.filter(n => n <= width+1e-6);
+      return { width, midpoint:(lo+hi)/2, fitting };
+    });
+    function assembly(cur, mirror, size) {
+      const seat = seats[cur];
+      const center = -Math.sign(angles[cur])*(mirror?-1:1)*seat.midpoint;
+      let z = center-size/2;
+      const pieces = (assemblies.get(size)||[]).map(length => {
+        const at = z+length/2; z += length;
+        return {length,center:at};
+      });
+      return {size, pieces, width:seat.width, ranges:size?[[center-size/2,center+size/2]]:[]};
+    }
     function clipDepth(poly, z, sign) {
       const result = [];
       poly.forEach((a, i) => {
@@ -149,34 +183,42 @@
       });
       return result;
     }
-    function contacts(state, punchY, cur, f) {
+    function contacts(state, punchY, cur, f, setup) {
       const hit = new Set(), t = sim.tools(punchY);
       const angle = 180 - Math.abs(angles[cur]) * f;
       if (sim.ctx.punch.angle > angle + 0.5 || sim.ctx.die.angle > angle + 0.5) hit.add('угол инструмента');
       const tools = [
-        ['пуансон', t.punch, full], ['пуансон', t.tang, full], ['матрица', sim.die.poly, full],
+        ['пуансон', t.punch, setup.ranges], ['пуансон', t.tang, setup.ranges], ['матрица', sim.die.poly, full],
         ['балка', t.beam, full], ...t.holder.map(p => ['держатель', p, mounts]),
         ['подложка', sim.padSection, full], ['переходник', sim.adapter, full], ['стол', sim.table, full]
       ].filter(([, poly]) => poly.length).map(([name,poly,ranges])=>({name,poly,ranges,box:LG.G.bounds(poly)}));
       panels.forEach((panel, i) => {
+        const normal = new THREE.Vector3(0,sim.ctx.S/2,0).applyMatrix4(state.matrices[i])
+          .sub(new THREE.Vector3().setFromMatrixPosition(state.matrices[i]));
         for (const cell of panel.cells) {
-          const world = cell.map(p => vector(p).applyMatrix4(state.matrices[i]));
-          const box = LG.G.bounds(world), zs = world.map(p => p.z);
-          const z0 = Math.min(...zs), z1 = Math.max(...zs);
-          for (const tool of tools) {
-            const {name,poly,ranges} = tool;
-            if (hit.has(name) || box.x1 < tool.box.x0 || box.x0 > tool.box.x1 ||
-                box.y1 < tool.box.y0 || box.y0 > tool.box.y1) continue;
-            const skip = p => name === 'пуансон' ? Math.hypot(p.x,p.y-punchY) < sim.ctx.Ri+sim.ctx.S+1 :
-              name === 'матрица' && Math.abs(p.x)<sim.ctx.die.V/2+sim.ctx.S && p.y>=state.tip-sim.ctx.S-1;
-            for (const [lo,hi] of ranges) {
-              if (z1 < lo || z0 > hi) continue;
-              let face = world;
-              if (z0 < lo) face = clipDepth(face,lo,1);
-              if (z1 > hi) face = clipDepth(face,hi,-1);
-              if (face.length && (LG.G.polyHits(face,poly,skip).length ||
-                  face.some(p=>contains(poly,p) && !skip(p)) || poly.some(p=>contains(face,p) && !skip(p)))) {
-                hit.add(name); break;
+          const mid = cell.map(p => vector(p).applyMatrix4(state.matrices[i]));
+          const faces = [mid];
+          if (Math.abs(normal.z)>tol) {
+            faces.push(mid.map(p=>p.clone().add(normal)),mid.map(p=>p.clone().sub(normal)));
+          }
+          for (const world of faces) {
+            const box = LG.G.bounds(world), zs = world.map(p => p.z);
+            const z0 = Math.min(...zs), z1 = Math.max(...zs);
+            for (const tool of tools) {
+              const {name,poly,ranges} = tool;
+              if (hit.has(name) || box.x1 < tool.box.x0 || box.x0 > tool.box.x1 ||
+                  box.y1 < tool.box.y0 || box.y0 > tool.box.y1) continue;
+              const skip = p => name === 'пуансон' ? Math.hypot(p.x,p.y-punchY) < sim.ctx.Ri+sim.ctx.S+1 :
+                name === 'матрица' && Math.abs(p.x)<sim.ctx.die.V/2+sim.ctx.S && p.y>=state.tip-sim.ctx.S-1;
+              for (const [lo,hi] of ranges) {
+                if (z1 <= lo + 1e-7 || z0 >= hi - 1e-7) continue;
+                let face = world;
+                if (z0 < lo) face = clipDepth(face,lo,1);
+                if (z1 > hi) face = clipDepth(face,hi,-1);
+                if (face.length && (LG.G.polyHits(face,poly,skip).length ||
+                    face.some(p=>contains(poly,p) && !skip(p)) || poly.some(p=>contains(face,p) && !skip(p)))) {
+                  hit.add(name); break;
+                }
               }
             }
           }
@@ -184,15 +226,29 @@
       });
       return [...hit];
     }
+    const choices = new Map();
+    const choiceKey = (done,cur,mirror) => [done.slice().sort((a,b)=>a-b).join(','),cur,+mirror].join('|');
     function checkStep(done,cur,mirror) {
-      const hits = new Map();
-      for (const f of [0,0.25,0.5,0.75,1]) {
-        const state = transform(done,cur,f,mirror);
-        for (const tool of contacts(state,state.tip,cur,f)) {
-          if (!hits.has(tool)) hits.set(tool,{tool,f});
+      const seat=seats[cur];
+      // Если торцы задевают готовую полку, проверяем ближайшую более
+      // короткую сборку. Не перебираем произвольно короткие пуансоны.
+      const candidates=seat.fitting.slice(0,done.length?2:1);
+      if (!candidates.length) candidates.push(0);
+      const samples=[0,0.25,0.5,0.75,1].map(f=>({f,state:transform(done,cur,f,mirror)}));
+      let best;
+      for (const size of candidates) {
+        const setup=assembly(cur,mirror,size), hits=new Map();
+        if (!size || seat.width > sizes[0]+tol) hits.set('длина', {tool:'недостаточно секций',f:0,angle:true});
+        for (const {f,state} of samples) {
+          for (const tool of contacts(state,state.tip,cur,f,setup)) {
+            if (!hits.has(tool)) hits.set(tool,{tool,f});
+          }
         }
+        if (!best || hits.size < best.hits.length) best={setup,hits:[...hits.values()]};
+        if (!hits.has('пуансон')) break;
       }
-      return [...hits.values()];
+      choices.set(choiceKey(done,cur,mirror),best.setup);
+      return best.hits;
     }
     // Для развёртки номера из DXF не задают пространственный порядок.
     // Сначала пробуем крайние полки и линии с тем же направлением подачи.
@@ -215,7 +271,14 @@
       },
       finish: (steps, auto) => ({ steps, auto, ok: steps.every(s => !s.hits.length) })
     };
-    const plan=LG.Sim.prototype.plan.call(planner,null,160);
+    const manual = Array.isArray(order) && order.length===lines.length &&
+      new Set(order).size===lines.length && order.every(i=>Number.isInteger(i)&&i>=0&&i<lines.length);
+    const plan=LG.Sim.prototype.plan.call(planner,manual?order:null,160);
+    const done=[];
+    for(const step of plan.steps) {
+      step.setup=choices.get(choiceKey(done,step.bend,step.mirror));
+      done.push(step.bend);
+    }
     return {lines,angles,panels,hinges,span,transform,contacts,toolLength,centers,plan};
   }
   LG.FlatFold={axes,model,vector};
@@ -272,11 +335,25 @@
     view.setPart('die',sim.die.poly,toolLength,steel);
     view.setPart('adapter',sim.adapter,toolLength,frame);
     view.setPart('pad',sim.padSection,toolLength,frame);
-    const moving=[view.setPart('punch',sim.punchLocal,toolLength,steel),view.setPart('tang',sim.tangLocal,toolLength,steel)];
+    const moving=[];
+    let segments=[], installed=null;
+    function install(setup) {
+      if (installed===setup) return;
+      for(const part of segments) view.setPart(part.name,null,0);
+      segments=[];
+      setup.pieces.forEach(({length,center},i)=>{
+        for(const [name,poly] of [['punch',sim.punchLocal],['tang',sim.tangLocal]]) {
+          const id=name+i, group=view.setPart(id,poly,length,steel,[center]);
+          segments.push({name:id,group});
+        }
+      });
+      installed=setup;
+    }
     sim.holderSection.slice(0,5).forEach((poly,i)=>moving.push(view.setPart('mount'+i,poly,i===3?toolLength:150,frame,i===3?[0]:centers)));
     const steps=m.plan.steps;
     const ease=t=>(1-Math.cos(Math.PI*Math.max(0,Math.min(1,t))))/2;
-    function draw(time){
+    function draw(time, spatial=true){
+      view.sectionView = !spatial;
       const k=Math.min(steps.length-1,Math.floor(time)),u=time-k,s=steps[k];
       const done=steps.slice(0,k).map(step=>step.bend);
       const f=ease((u-.4)/.42);
@@ -292,7 +369,9 @@
         transfer.elements[13]+=m.span*.4*Math.sin(Math.PI*t);
         pose.matrices.forEach(mat=>mat.premultiply(transfer));
       }
-      const hits = m.contacts(pose,y,s.bend,f);
+      install(s.setup);
+      segments.forEach(part=>{part.group.position.y=y;});
+      const hits = m.contacts(pose,y,s.bend,f,s.setup);
       meshes.forEach((mesh,i)=>{
         mesh.matrix.copy(pose.matrices[i]); mesh.matrixWorldNeedsUpdate=true;
         mesh.material.color.setHex(hits.length ? 0xff3b30 : 0x60809d);
@@ -312,6 +391,7 @@
     return {
       draw,
       clear() {
+        for(const part of segments) view.setPart(part.name,null,0);
         for (const object of [...marks, ...meshes]) {
           object.parent.remove(object);
           object.geometry.dispose();

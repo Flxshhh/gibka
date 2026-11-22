@@ -524,4 +524,3 @@ svg .flat-dxf-label { fill: var(--warn); stroke: var(--card); stroke-width: 3; v
 }
 
 #flatStage { height: clamp(300px, 55vh, 680px); background: var(--sunk); border-radius: var(--r-c); }
-#flatTime { flex: 1; min-width: 120px; }

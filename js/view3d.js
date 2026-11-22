@@ -151,6 +151,21 @@
 
   View3D.prototype.render = function () {
     if (!this.ok) return;
+    if (this.sectionView) {
+      const camera = this.endCamera ||= new THREE.OrthographicCamera();
+      const height = this.radius * Math.tan(this.camera.fov * Math.PI / 360);
+      camera.top = height;
+      camera.bottom = -height;
+      camera.right = height * this.camera.aspect;
+      camera.left = -camera.right;
+      camera.far = this.camera.far;
+      camera.position.copy(this.target);
+      camera.position.z += camera.far / 2;
+      camera.lookAt(this.target);
+      camera.updateProjectionMatrix();
+      this.renderer.render(this.scene, camera);
+      return;
+    }
     const s = Math.sin(this.phi);
     this.camera.position.set(
       this.target.x + this.radius * s * Math.sin(this.theta),
