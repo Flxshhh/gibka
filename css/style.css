@@ -513,3 +513,12 @@ thead th { font: 600 11.5px var(--f-body); text-transform: uppercase; letter-spa
 .rec-count { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; pointer-events: none; z-index: 2; }
 .rec-count b { font: 800 84px/1 var(--f-display); color: var(--accent); text-shadow: 0 2px 12px var(--card); }
 .rec-count span { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 5px 12px; font-size: 13px; box-shadow: var(--shadow); }
+
+/* Развёртка из DXF */
+svg .flat-dxf-cut { fill: var(--tool-fill); stroke: var(--tool-edge); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+svg .flat-dxf-bend { stroke: var(--warn); stroke-width: 1.5; stroke-dasharray: 5 4; vector-effect: non-scaling-stroke; }
+svg .flat-dxf-label { fill: var(--warn); stroke: var(--card); stroke-width: 3; vector-effect: non-scaling-stroke; paint-order: stroke; font-family: var(--f-mono); }
+@media (max-width: 860px) {
+  body[data-tab="part"].flat-part { padding-bottom: env(safe-area-inset-bottom, 0px); }
+  body[data-tab="part"].flat-part .toast { bottom: calc(20px + env(safe-area-inset-bottom, 0px)); }
+}

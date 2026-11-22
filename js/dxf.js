@@ -37,7 +37,10 @@
       else if (e.type === 'ENDBLK') bl = null;
       else if (bl) bl.ents.push(e);
     }
-    return { ents: entities(sections.ENTITIES || []), blocks };
+    const header = sections.HEADER || [];
+    const unit = header.findIndex(([code, name]) => code === '9' && name.trim() === '$INSUNITS');
+    const units = unit >= 0 && header[unit + 1]?.[0] === '70' ? +header[unit + 1][1] : 0;
+    return { ents: entities(sections.ENTITIES || []), blocks, units };
   }
 
   function arcPts(cx, cy, r, a0, a1, step = 3) {
@@ -59,23 +62,29 @@
   }
 
   // T — аффинное преобразование [a,b,c,d,e,f]: x' = a·x + c·y + e, y' = b·x + d·y + f
-  function explode(ents, blocks, T, depth, out) {
+  function explode(ents, blocks, T, depth, out, inheritedLayer = '0') {
     const [a, b, c, d, e_, f] = T;
     const tf = p => [a * p[0] + c * p[1] + e_, b * p[0] + d * p[1] + f];
-    const add = (pts, arc) => { const q = pts.map(tf); for (let k = 0; k < q.length - 1; k++) out.push({ x1: q[k][0], y1: q[k][1], x2: q[k + 1][0], y2: q[k + 1][1], arc: !!arc }); };
-    const polyAdd = (vs, bul, closed) => {
+    const add = (pts, arc, layer) => {
+      const q = pts.map(tf);
+      for (let k = 0; k < q.length - 1; k++) {
+        out.push({ x1: q[k][0], y1: q[k][1], x2: q[k + 1][0], y2: q[k + 1][1], arc: !!arc, layer });
+      }
+    };
+    const polyAdd = (vs, bul, closed, layer) => {
       const n = vs.length;
-      for (let k = 0; k < n - 1 + (closed ? 1 : 0); k++) add(bulgePts(vs[k], vs[(k + 1) % n], bul[k] || 0), Math.abs(bul[k] || 0) > 1e-9);
+      for (let k = 0; k < n - 1 + (closed ? 1 : 0); k++) add(bulgePts(vs[k], vs[(k + 1) % n], bul[k] || 0), Math.abs(bul[k] || 0) > 1e-9, layer);
     };
     let poly = null;
     for (const e of ents) {
-      const t = e.type;
-      if (t === 'LINE') add([[fget(e, 10), fget(e, 20)], [fget(e, 11), fget(e, 21)]], false);
+      const t = e.type, ownLayer = sget(e, 8, '0');
+      const layer = ownLayer === '0' ? inheritedLayer : ownLayer;
+      if (t === 'LINE') add([[fget(e, 10), fget(e, 20)], [fget(e, 11), fget(e, 21)]], false, layer);
       else if (t === 'ARC') {
         let cx = fget(e, 10), a0 = fget(e, 50), a1 = fget(e, 51);
         if (fget(e, 230, 1) < 0) { cx = -cx; [a0, a1] = [180 - a1, 180 - a0]; }   // нормаль (0,0,−1): дуга задана зеркально
-        add(arcPts(cx, fget(e, 20), fget(e, 40), a0, a1), true);
-      } else if (t === 'CIRCLE') add(arcPts(fget(e, 10) * (fget(e, 230, 1) < 0 ? -1 : 1), fget(e, 20), fget(e, 40), 0, 360), true);
+        add(arcPts(cx, fget(e, 20), fget(e, 40), a0, a1), true, layer);
+      } else if (t === 'CIRCLE') add(arcPts(fget(e, 10) * (fget(e, 230, 1) < 0 ? -1 : 1), fget(e, 20), fget(e, 40), 0, 360), true, layer);
       else if (t === 'LWPOLYLINE') {
         const vs = [], bul = []; let x = null;
         for (const [cc, v] of e.g) {
@@ -84,7 +93,7 @@
           else if (cc === 42 && vs.length) bul[vs.length - 1] = parseFloat(v);
         }
         if (fget(e, 230, 1) < 0) { vs.forEach(p => { p[0] = -p[0]; }); bul.forEach((v, i) => { bul[i] = -v; }); }
-        polyAdd(vs, bul, fget(e, 70, 0) & 1);
+        polyAdd(vs, bul, fget(e, 70, 0) & 1, layer);
       } else if (t === 'INSERT') {
         const name = sget(e, 2), blk = blocks[name];
         if (!blk || depth > 8 || /^\*D/i.test(name)) continue;
@@ -93,18 +102,19 @@
         if (fget(e, 230, 1) < 0) { ix = -ix; sx = -sx; rot = -rot; }
         const cr = Math.cos(rot), sr = Math.sin(rot);
         const la = cr * sx, lb = sr * sx, lc = -sr * sy, ld = cr * sy, le = ix - (la * bx + lc * by), lf = iy - (lb * bx + ld * by);
-        explode(blk.ents, blocks, [a * la + c * lb, b * la + d * lb, a * lc + c * ld, b * lc + d * ld, a * le + c * lf + e_, b * le + d * lf + f], depth + 1, out);
-      } else if (t === 'POLYLINE') poly = { closed: fget(e, 70, 0) & 1, v: [], b: [] };
+        explode(blk.ents, blocks, [a * la + c * lb, b * la + d * lb, a * lc + c * ld, b * lc + d * ld, a * le + c * lf + e_, b * le + d * lf + f], depth + 1, out, layer);
+      } else if (t === 'POLYLINE') poly = { closed: fget(e, 70, 0) & 1, v: [], b: [], layer };
       else if (t === 'VERTEX' && poly) { poly.v.push([fget(e, 10), fget(e, 20)]); poly.b.push(fget(e, 42, 0)); }
-      else if (t === 'SEQEND' && poly) { polyAdd(poly.v, poly.b, poly.closed); poly = null; }
+      else if (t === 'SEQEND' && poly) { polyAdd(poly.v, poly.b, poly.closed, poly.layer); poly = null; }
     }
     return out;
   }
 
-  D.segments = function (text) {
-    const { ents, blocks } = parse(text);
-    return explode(ents, blocks, [1, 0, 0, 1, 0, 0], 0, []).filter(s => isFinite(s.x1 + s.y1 + s.x2 + s.y2));
-  };
+  function segments({ ents, blocks }, scale = 1) {
+    return explode(ents, blocks, [scale, 0, 0, scale, 0, 0], 0, []).filter(s => isFinite(s.x1 + s.y1 + s.x2 + s.y2));
+  }
+
+  D.segments = text => segments(parse(text));
 
   // ---------- Контуры ----------
   const len = s => Math.hypot(s.x2 - s.x1, s.y2 - s.y1);
@@ -348,11 +358,40 @@
     }) };
   };
 
+  function flatPart(drawing, hasCut) {
+    // Значения $INSUNITS: без единиц, дюймы, футы, мили, мм, см, м, км, микродюймы, милы, ярды.
+    const mm = [1, 25.4, 304.8, 1609344, 1, 10, 1000, 1e6, 0.0000254, 0.0254, 914.4];
+    const scale = mm[drawing.units];
+    if (!scale) return { error: 'Единицы DXF не поддерживаются. Сохраните развёртку в миллиметрах.' };
+    const geometry = segments(drawing, scale).filter(s => len(s) > 1e-6);
+    const bendLines = [], cutEdges = [];
+    for (const s of geometry) {
+      const layer = s.layer.toUpperCase();
+      if (layer === 'BEND') bendLines.push(s);
+      else if (!hasCut || layer === 'CUT' || layer === 'PUNCH') cutEdges.push(s);
+    }
+    const loops = chain(cutEdges, 0.05);
+    if (!loops.length || loops.reduce((n, loop) => n + loop.length, 0) !== cutEdges.length ||
+        loops.some(loop => Math.abs(area(loop)) < 1e-6)) {
+      return { error: 'У развёртки контур реза и каждый вырез должны быть замкнуты. Проверьте геометрию на слоях CUT и PUNCH.' };
+    }
+    const origin = box(loops.flat());
+    const point = (x, y) => ({ x: x - origin.x0, y: y - origin.y0 });
+    return { flatDxf: {
+      contours: loops.map(loop => loop.map(([x, y]) => point(x, y))),
+      bends: bendLines.map(s => [point(s.x1, s.y1), point(s.x2, s.y2)])
+    } };
+  }
+
   // ---------- Контур детали ----------
   // Профиль детали: либо одна линия (ломаная с дугами или без), либо замкнутый контур листа толщиной S.
   // Возвращает отрезки (направление, длина до вершин острых углов) и, для замкнутого контура, толщину.
-  D.part = function (text) {
-    const seg = D.segments(text).filter(s => len(s) > 1e-6);
+  D.part = function (text, asFlat = false) {
+    const drawing = parse(text);
+    const raw = segments(drawing);
+    const hasCut = raw.some(s => s.layer.toUpperCase() === 'CUT');
+    if (hasCut || asFlat) return flatPart(drawing, hasCut);
+    const seg = raw.filter(s => len(s) > 1e-6);
     if (!seg.length) return { error: 'В файле нет линий. Нужен профиль детали: ломаная линия или замкнутый контур листа.' };
     // связные цепочки: сначала от свободных концов (разомкнутые), потом замкнутые
     const tol = 0.05, key = (x, y) => Math.round(x / tol) + ',' + Math.round(y / tol), adj = new Map();
