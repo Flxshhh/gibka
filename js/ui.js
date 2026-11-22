@@ -1092,13 +1092,14 @@
   }
   function flatTable(model, printing=false) {
     const steps = model.plan.steps;
-    return '<div class="tbl-wrap"><table class="bends"><thead><tr><th>Шаг</th><th>Гиб</th><th>Угол поворота полки</th><th>Линия, мм</th><th>Секции пуансона, мм</th><th>Статус</th>'+ (printing?'':'<th></th>') +'</tr></thead><tbody>' +
+    return '<div class="tbl-wrap"><table class="bends"><thead><tr><th>Шаг</th><th>Гиб</th><th>Угол поворота полки</th><th>Линия, мм</th><th>Секции пуансона, мм</th><th>Упоры, мм</th><th>Статус</th>'+ (printing?'':'<th></th>') +'</tr></thead><tbody>' +
       steps.map((s,k) => {
         const first=s.hits.length ? Math.min(...s.hits.map(h=>h.f)) : 0;
         const time=k+0.4+0.42*Math.acos(1-2*first)/Math.PI;
         const gap=s.setup.width-s.setup.size;
         return '<tr class="'+(s.hits.length?'row-bad':'')+'"><td>'+(printing?k+1:'<button class="link" data-flat-time="'+time+'">'+(k+1)+'</button>')+'</td><td>Г'+(s.bend+1)+'</td><td>'+fmt(model.angles[s.bend],1)+'°</td><td>'+fmt(s.setup.width,2)+'</td><td>'+sectionList(s.setup)+' = '+s.setup.size+
           (gap>0.01?'<div class="warn small">Короче линии на '+fmt(gap,2)+' мм</div>':'')+'</td><td>'+
+          s.gauge.fingers.map(f => f.stop == null ? '—' : fmt(f.stop,1)).join(' / ')+'</td><td>' +
           (s.hits.length?'<span class="bad">'+hitList(s)+'</span>':'<span class="good">Без удара</span>')+'</td>'+(printing?'':'<td class="nowrap">'+
           [-1,1].map(d=>'<button class="ghost sm" data-mv="'+d+'" data-k="'+k+'" aria-label="'+(d<0?'Раньше':'Позже')+'">'+(d<0?'↑':'↓')+'</button>').join('')+'</td>')+'</tr>';
       }).join('')+'</tbody></table></div>';
@@ -1964,7 +1965,7 @@
       const TOOL = { color: 0xf0f1f2, edges: true, edgeColor: 0x91979d, metal: 0.52, roughness: 0.27 };
       const FRAME = { color: 0x62717b, edges: true, edgeColor: 0x47545e, metal: 0.58, roughness: 0.37 };
       v.setPart('table', G.rect(-70, -40, 70, 0), Lt * 1.12, { color: 0xa1a7a8, metal: 0 });
-      v.setPart('pad', sim.padSection, Lt, TOOL);
+      v.setPart('pad', sim.padSection, Lt, FRAME);
       v.setPart('adapter', sim.adapter, Lt, FRAME);
       v.setPart('die', sim.die.poly, Lt, TOOL);
       v.setPart('punch', sim.punchLocal, Lt, TOOL);
@@ -2007,10 +2008,7 @@
     const stop = s.stop;
     if (v.gaugeStop !== stop) {
       v.gaugeStop = stop;
-      const y = sim.dieTop, railX = v.gaugeRailX, x = v.gaugeOrigin;
-      const finger = stop == null ? null : [{ x, y }, { x: railX + 15, y },
-        { x: railX + 15, y: y + 31 }, { x: x + 16, y: y + 31 },
-        { x: x + 16, y: y + 16 }, { x, y: y + 16 }];
+      const finger = stop == null ? null : sim.gaugeFinger(v.gaugeOrigin, v.gaugeRailX);
       for (const side of [-1, 1]) {
         const part = v.setPart('gauge' + side, finger, Math.min(42, L * 0.22), { color: 0x434743, edges: true, edgeColor: 0x30332f, metal: 0 });
         part.position.z = side * L * 0.22;
@@ -2074,7 +2072,7 @@
     if (tip == null) tip = pl.tipY;
     const dx = -slide * 120;
     const sheet = G.translate(pl.poly, dx, 0), face = G.translate(s.face === 'A' ? pl.A : pl.B, dx, 0);
-    const hits = slide > 0 ? [] : sim.collide(pl, tip);
+    const hits = u < 0.15 ? [] : sim.collide(pl, tip);
     const t = sim.tools(tip);
     const hitTools = hits.map(h => h.tool);
     const cls = name => hitTools.indexOf(name) >= 0 ? ' hit' : '';

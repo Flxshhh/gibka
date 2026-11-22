@@ -173,13 +173,13 @@
       });
       return {size, pieces, width:seat.width, ranges:size?[[center-size/2,center+size/2]]:[]};
     }
-    function clipDepth(poly, z, sign) {
+    function clipPlane(poly, value, sign, axis='z') {
       const result = [];
       poly.forEach((a, i) => {
         const b = poly[(i + 1) % poly.length];
-        const inside = sign * (a.z - z) >= 0;
+        const inside = sign * (a[axis] - value) >= 0;
         if (inside) result.push(a);
-        if (inside !== (sign * (b.z - z) >= 0)) result.push(a.clone().lerp(b, (z - a.z) / (b.z - a.z)));
+        if (inside !== (sign * (b[axis] - value) >= 0)) result.push(a.clone().lerp(b, (value - a[axis]) / (b[axis] - a[axis])));
       });
       return result;
     }
@@ -213,8 +213,8 @@
               for (const [lo,hi] of ranges) {
                 if (z1 <= lo + 1e-7 || z0 >= hi - 1e-7) continue;
                 let face = world;
-                if (z0 < lo) face = clipDepth(face,lo,1);
-                if (z1 > hi) face = clipDepth(face,hi,-1);
+                if (z0 < lo) face = clipPlane(face,lo,1);
+                if (z1 > hi) face = clipPlane(face,hi,-1);
                 if (face.length && (LG.G.polyHits(face,poly,skip).length ||
                     face.some(p=>contains(poly,p) && !skip(p)) || poly.some(p=>contains(face,p) && !skip(p)))) {
                   hit.add(name); break;
@@ -274,9 +274,49 @@
     const manual = Array.isArray(order) && order.length===lines.length &&
       new Set(order).size===lines.length && order.every(i=>Number.isInteger(i)&&i>=0&&i<lines.length);
     const plan=LG.Sim.prototype.plan.call(planner,manual?order:null,160);
+    // Ищем заднюю кромку в полосе каждого пальца на высоте выбранной матрицы.
+    // На развёртке с вырезом эти две координаты X могут различаться.
+    function gaugeSetup(done, step) {
+      const {width, ranges} = step.setup;
+      const center = ranges.length ? (ranges[0][0] + ranges[0][1]) / 2 :
+        -Math.sign(angles[step.bend]) * (step.mirror ? -1 : 1) * seats[step.bend].midpoint;
+      const depth = Math.min(42, width * 0.22);
+      const fingers = [-1,1].map(side => ({z:center + side * width * 0.22, depth, stop:null}));
+      let retreat = 35;
+      let rail;
+      for (let sample = 0; sample <= 16; sample++) {
+        const pose = transform(done, step.bend, sample / 16, step.mirror);
+        panels.forEach((panel,i) => {
+          const mat = pose.matrices[i];
+          const normal = new THREE.Vector3().setFromMatrixColumn(mat,1).multiplyScalar(sim.ctx.S / 2);
+          for (const cell of panel.cells) {
+            const mid = cell.map(p => vector(p).applyMatrix4(mat));
+            for (const sign of [-1,1]) {
+              const surface = mid.map(p => p.clone().addScaledVector(normal, sign));
+              const band = clipPlane(clipPlane(surface,sim.dieTop-tol,1,'y'),sim.dieTop+31,-1,'y');
+              if (!band.length) continue;
+              for (const finger of fingers) {
+                const strip = clipPlane(clipPlane(band,finger.z-depth/2,1),finger.z+depth/2,-1);
+                if (!strip.length) continue;
+                if (!sample) {
+                  const nose = clipPlane(strip,sim.dieTop+16,-1,'y');
+                  for (const p of nose) if (p.x>0) finger.stop = Math.max(finger.stop ?? 0,p.x);
+                } else if (finger.stop != null) {
+                  for (const p of strip) retreat = Math.max(retreat,p.x-finger.stop+5);
+                }
+              }
+            }
+          }
+        });
+        if (!sample) rail = Math.max(LG.G.bounds(sim.die.poly.concat(sim.adapter,sim.padSection)).x1+35,
+          ...fingers.map(f => (f.stop ?? 0)+45));
+      }
+      return {fingers,rail,retreat};
+    }
     const done=[];
     for(const step of plan.steps) {
       step.setup=choices.get(choiceKey(done,step.bend,step.mirror));
+      step.gauge = gaugeSetup(done,step);
       done.push(step.bend);
     }
     return {lines,angles,panels,hinges,span,transform,contacts,toolLength,centers,plan};
@@ -351,6 +391,28 @@
     }
     sim.holderSection.slice(0,5).forEach((poly,i)=>moving.push(view.setPart('mount'+i,poly,i===3?toolLength:150,frame,i===3?[0]:centers)));
     const steps=m.plan.steps;
+    const rail = view.setPart('gaugeRail', LG.G.rect(0,sim.dieTop-21,24,sim.dieTop),toolLength,
+      {color:0xa1a7a8,metal:0});
+    const fingerStyle = {color:0x434743,edges:true,edgeColor:0x30332f,metal:0};
+    const parked = Math.max(...steps.map(step => step.gauge.rail + step.gauge.retreat));
+    let gaugeStep;
+    function drawGauge(step,u) {
+      const g = step.gauge;
+      if (step !== gaugeStep) {
+        g.fingers.forEach((f,i) => {
+          const poly = f.stop == null ? null : sim.gaugeFinger(f.stop-g.rail,0);
+          view.setPart('gauge'+i,poly,f.depth,fingerStyle,[f.z]);
+        });
+        gaugeStep = step;
+      }
+      // Подвести к уложенному листу, отвести после прижима и припарковать перед поворотом.
+      let x = g.rail;
+      if (u < .25) x += (parked-g.rail)*(1-ease((u-.18)/.07));
+      else if (u < .82) x += g.retreat*ease((u-.35)/.05);
+      else x += g.retreat+(parked-g.rail-g.retreat)*ease((u-.82)/.18);
+      rail.position.x = x;
+      g.fingers.forEach((_,i) => {view.parts['gauge'+i].position.x = x;});
+    }
     const ease=t=>(1-Math.cos(Math.PI*Math.max(0,Math.min(1,t))))/2;
     function draw(time, spatial=true){
       view.sectionView = !spatial;
@@ -359,7 +421,7 @@
       const f=ease((u-.4)/.42);
       const pose=m.transform(done,s.bend,f,s.mirror);
       const open=Math.max(pose.tip+16,Math.min(sim.tipOpen,sim.dieTop+m.span+25));
-      const y=pose.tip+(open-pose.tip)*(1-ease((u-.25)/.15)+ease((u-.82)/.18));
+      const y=pose.tip+(open-pose.tip)*(1-ease((u-.25)/.10)+ease((u-.82)/.18));
       if(k && u<.25){
         const prev=steps[k-1],from=m.transform(done.slice(0,-1),prev.bend,1,prev.mirror);
         const t=u/.25;
@@ -371,7 +433,8 @@
       }
       install(s.setup);
       segments.forEach(part=>{part.group.position.y=y;});
-      const hits = m.contacts(pose,y,s.bend,f,s.setup);
+      drawGauge(s,u);
+      const hits = u < .25 ? [] : m.contacts(pose,y,s.bend,f,s.setup);
       meshes.forEach((mesh,i)=>{
         mesh.matrix.copy(pose.matrices[i]); mesh.matrixWorldNeedsUpdate=true;
         mesh.material.color.setHex(hits.length ? 0xff3b30 : 0x60809d);
@@ -381,7 +444,7 @@
       view.render();
       const previous=steps[k-1],direction=(i)=>Math.atan2(m.lines[i][1].y-m.lines[i][0].y,m.lines[i][1].x-m.lines[i][0].x);
       const turn=previous?Math.abs(LG.G.norm180((direction(s.bend)-direction(previous.bend))*180/Math.PI+(s.mirror!==previous.mirror?180:0))):0;
-      const phase=u<.25?(k?'Переустановка':'Укладка'):u<.4?'Подвод пуансона':u<.82?'Гибка':'Возврат';
+      const phase=u<.25?(k?'Переустановка':'Укладка'):u<.35?'Подвод пуансона':u<.4?'Отвод задних упоров':u<.82?'Гибка':'Возврат';
       report('Шаг '+(k+1)+' из '+steps.length+' · Г'+(s.bend+1)+' · '+phase+
         ' · сторона '+(m.angles[s.bend]>0?'A':'B')+' вверх'+(turn>.5?' · поворот '+Math.round(turn)+'°':'')+
         (previous && Math.sign(m.angles[s.bend])!==Math.sign(m.angles[previous.bend])?' · переворот':'')+

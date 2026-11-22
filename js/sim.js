@@ -173,6 +173,12 @@
     };
   };
 
+  Sim.prototype.gaugeFinger = function (x, railX) {
+    const y = this.dieTop;
+    return [{ x, y }, { x: railX + 15, y }, { x: railX + 15, y: y + 31 },
+      { x: x + 16, y: y + 31 }, { x: x + 16, y: y + 16 }, { x, y: y + 16 }];
+  };
+
   Sim.prototype.mountSection = function (tipY) {
     return this.holderSection.map(poly => G.translate(poly, 0, tipY));
   };
