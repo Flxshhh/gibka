@@ -2072,7 +2072,7 @@
     if (tip == null) tip = pl.tipY;
     const dx = -slide * 120;
     const sheet = G.translate(pl.poly, dx, 0), face = G.translate(s.face === 'A' ? pl.A : pl.B, dx, 0);
-    const hits = u < 0.15 ? [] : sim.collide(pl, tip);
+    const hits = slide > 0 ? [] : sim.collide(pl, tip);
     const t = sim.tools(tip);
     const hitTools = hits.map(h => h.tool);
     const cls = name => hitTools.indexOf(name) >= 0 ? ' hit' : '';

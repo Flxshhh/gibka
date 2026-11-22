@@ -405,7 +405,7 @@
         });
         gaugeStep = step;
       }
-      // Подвести к уложенному листу, отвести после прижима и припарковать перед поворотом.
+      // Подвести к уложенному листу, отвести перед гибом и припарковать перед поворотом.
       let x = g.rail;
       if (u < .25) x += (parked-g.rail)*(1-ease((u-.18)/.07));
       else if (u < .82) x += g.retreat*ease((u-.35)/.05);
@@ -421,7 +421,7 @@
       const f=ease((u-.4)/.42);
       const pose=m.transform(done,s.bend,f,s.mirror);
       const open=Math.max(pose.tip+16,Math.min(sim.tipOpen,sim.dieTop+m.span+25));
-      const y=pose.tip+(open-pose.tip)*(1-ease((u-.25)/.10)+ease((u-.82)/.18));
+      const y=pose.tip+(open-pose.tip)*(1-ease((u-.25)/.15)+ease((u-.82)/.18));
       if(k && u<.25){
         const prev=steps[k-1],from=m.transform(done.slice(0,-1),prev.bend,1,prev.mirror);
         const t=u/.25;
@@ -434,7 +434,7 @@
       install(s.setup);
       segments.forEach(part=>{part.group.position.y=y;});
       drawGauge(s,u);
-      const hits = u < .25 ? [] : m.contacts(pose,y,s.bend,f,s.setup);
+      const hits = m.contacts(pose,y,s.bend,f,s.setup);
       meshes.forEach((mesh,i)=>{
         mesh.matrix.copy(pose.matrices[i]); mesh.matrixWorldNeedsUpdate=true;
         mesh.material.color.setHex(hits.length ? 0xff3b30 : 0x60809d);
@@ -444,7 +444,7 @@
       view.render();
       const previous=steps[k-1],direction=(i)=>Math.atan2(m.lines[i][1].y-m.lines[i][0].y,m.lines[i][1].x-m.lines[i][0].x);
       const turn=previous?Math.abs(LG.G.norm180((direction(s.bend)-direction(previous.bend))*180/Math.PI+(s.mirror!==previous.mirror?180:0))):0;
-      const phase=u<.25?(k?'Переустановка':'Укладка'):u<.35?'Подвод пуансона':u<.4?'Отвод задних упоров':u<.82?'Гибка':'Возврат';
+      const phase=u<.25?(k?'Переустановка':'Укладка'):u<.4?'Подвод пуансона':u<.82?'Гибка':'Возврат';
       report('Шаг '+(k+1)+' из '+steps.length+' · Г'+(s.bend+1)+' · '+phase+
         ' · сторона '+(m.angles[s.bend]>0?'A':'B')+' вверх'+(turn>.5?' · поворот '+Math.round(turn)+'°':'')+
         (previous && Math.sign(m.angles[s.bend])!==Math.sign(m.angles[previous.bend])?' · переворот':'')+
