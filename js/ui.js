@@ -277,7 +277,7 @@
   });
 
   // ---------- Вкладки ----------
-  function setTab(t) {
+  function setTab(t, autoplay = false) {
     ST.ui.tab = t; saveAll();
     PLAYER.pause();
     stopFlatPlayback();
@@ -286,7 +286,7 @@
     $$('.tab').forEach(s => { s.hidden = s.id !== 'tab-' + t; });
     if (t === 'punch') renderPunchTab();
     if (t === 'part') renderPartTab();
-    if (t === 'sim') renderSimTab();
+    if (t === 'sim') renderSimTab(autoplay);
     if (t === 'dies') renderDiesTab();
     if (t === 'table') renderTable();
   }
@@ -603,7 +603,7 @@
       [['outer', 'по наружной стороне'], ['inner', 'по внутренней стороне'], ['mid', 'по средней линии']]
         .map(o => '<option value="' + o[0] + '"' + (o[0] === p.dimMode ? ' selected' : '') + '>' + o[1] + '</option>').join('') + '</select></div>');
 
-    for (const id of ['addCard', 'profileHelp', 'segMirror', 'goBend', 'curInfo', 'segList']) {
+    for (const id of ['addCard', 'profileHelp', 'segMirror', 'curInfo', 'segList']) {
       $('#' + id).hidden = !!p.flatDxf;
     }
     document.body.classList.toggle('flat-part', !!p.flatDxf);
@@ -799,7 +799,7 @@
       '<p class="muted small">Контуры реза: ' + flat.contours.length + ' · Линии гиба: ' + lines.length + '</p>' +
       (lines.length ? '<p>Угол поворота от плоского листа: плюс — вверх со стороны A, минус — вниз. По умолчанию +90°.</p><div class="row">' +
         lines.map(([a,b],i) => '<label>Г' + (i+1) + ' · ' + fmt(G.dist(a,b),1) + ' мм <input type="number" min="-175" max="175" step="any" data-flat-angle="' + i + '" value="' + (+flat.angles?.[i] || 90) + '" aria-label="Угол поворота Г' + (i+1) + '"> °</label>').join('') +
-        '</div><button id="foldFlat" class="primary">Симулировать гибку</button>' : '');
+        '</div>' : '');
   }
 
   // Полоска развёртки с линиями гиба
@@ -997,8 +997,13 @@
       }
       if (q('[data-vtx]')) { setCursor(+q('[data-vtx]').dataset.vtx); return; }
       if (q('[data-cur]')) { const v = q('[data-cur]').dataset.cur; setCursor(v === 'end' ? Infinity : +v); return; }
-      if (t.closest('#foldFlat')) { setTab('sim'); return; }
-      if (t.id === 'goBend') {
+      if (t.closest('#goBend')) {
+        if (p.flatDxf) {
+          if (!p.flatDxf.bends.length) { toast('В развёртке нет линий BEND'); return; }
+          setTab('sim', true);
+          $('#flatSimNote').scrollIntoView({ behavior: 'smooth', block: 'start' });
+          return;
+        }
         const r = resolve();
         if (!r.an.bends.length) { toast('Нужно хотя бы 2 отрезка — иначе гнуть нечего'); return; }
         if (r.an.errors.length) { toast('Сначала исправьте ошибки в детали'); return; }
@@ -1083,7 +1088,7 @@
     cancelAnimationFrame(flatFrame); flatFrame = 0; flatRequest++;
     $('#flatPlay').textContent = 'Пуск';
   }
-  function renderFlatSimulation(p) {
+  function renderFlatSimulation(p, autoplay) {
     stopFlatPlayback();
     const request = flatRequest;
     flatScene?.clear(); flatScene = null;
@@ -1102,11 +1107,23 @@
         const model = LG.FlatFold.model(p.flatDxf,sim);
         $('#flatStage').hidden = false;
         flatView ||= new LG.View3D($('#flatStage'));
-        flatScene = LG.FlatFold.scene(flatView,model,sim,msg => { $('#flatStep').textContent = msg; });
-        $('#flatPlan').textContent = 'Порядок: ' + model.plan.steps.map(s=>'Г'+(s.bend+1)).join(' → ') +
-          ' · ' + r.punch.name + ' / ' + r.die.name + (model.plan.ok ? '' : ' · Есть возможные столкновения');
-        const slider=$('#flatTime'); slider.max=model.plan.steps.length; slider.value=0;
+        flatScene = LG.FlatFold.scene(flatView,model,sim,(msg,hit) => {
+          $('#flatStep').textContent = msg;
+          $('#flatStep').classList.toggle('bad', hit);
+        });
+        const steps = model.plan.steps;
+        const status = model.plan.ok ? '<b class="good">Порядок подобран, ударов не обнаружено</b>' :
+          '<div class="alert"><b>' + ic('block', 'lg') + 'Без удара согнуть не получается</b>' +
+          '<div>Для выбранного инструмента среди проверенных установок не найден порядок без столкновений.</div></div>';
+        $('#flatPlan').innerHTML = status + '<div class="chips">' + steps.map((s,k) => {
+          const first = s.hits.length ? Math.min(...s.hits.map(h=>h.f)) : 0;
+          const time = k + 0.4 + 0.42 * Math.acos(1 - 2 * first) / Math.PI;
+          return '<button type="button" data-flat-time="' + time + '" class="sm ' + (s.hits.length ? 'bad' : 'good') +
+            '">Шаг ' + (k+1) + ' · Г' + (s.bend+1) + ' · ' + (s.hits.length ? s.hits.map(h=>esc(h.tool)).join(', ') : 'ок') + '</button>';
+        }).join('') + '</div>';
+        const slider=$('#flatTime'); slider.max=steps.length; slider.value=0;
         $('#flatPlayback').hidden=false;
+        if (autoplay) playFlat();
       } catch(err) {
         $('#flatStage').hidden=true; $('#flatPlan').textContent=err.message;
       }
@@ -1128,11 +1145,11 @@
     flatFrame=requestAnimationFrame(tick);
   }
 
-  function renderSimTab() {
+  function renderSimTab(autoplay = false) {
     const p = ST.part;
     $('#flatSimNote').hidden = !p.flatDxf;
     $('#profileSim').hidden = !!p.flatDxf;
-    if (p.flatDxf) { renderFlatSimulation(p); return; }
+    if (p.flatDxf) { renderFlatSimulation(p, autoplay); return; }
     const r = resolve();
     const mid = r.opts[Math.round((r.opts.length - 1) / 2)];
     const vSel = '<div class="field"><label>Раскрытие V по таблице</label><div class="vinfo">S=' + fmt(r.S, 2) + ' → среднее <b>' + fmt(mid.F, 0) +
@@ -1371,6 +1388,13 @@
   }
 
   function bindSimTab() {
+    $('#flatPlan').addEventListener('click', e => {
+      const button = e.target.closest('[data-flat-time]');
+      if (!button || !flatScene) return;
+      stopFlatPlayback();
+      $('#flatTime').value = button.dataset.flatTime;
+      flatScene.draw(+button.dataset.flatTime);
+    });
     $('#flatPlay').addEventListener('click', playFlat);
     $('#flatTime').addEventListener('input', e => {stopFlatPlayback();flatScene?.draw(+e.target.value);});
     $('#flatTools').addEventListener('change', e => {

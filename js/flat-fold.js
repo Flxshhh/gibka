@@ -134,26 +134,65 @@
       if(matrices.filter(Boolean).length!==panels.length) throw Error('Обнаружены несвязанные панели.');
       return {matrices,tip};
     };
-    function checkStep(done,cur,mirror) {
-      const hit=new Set(), angle=180-Math.abs(angles[cur]);
-      if(sim.ctx.punch.angle>angle+0.5 || sim.ctx.die.angle>angle+0.5) hit.add('угол инструмента');
-      for(const f of [0,0.25,0.5,0.75,1]){
-        const state=transform(done,cur,f,mirror), t=sim.tools(state.tip);
-        const tools=[['пуансон',t.punch],['матрица',sim.die.poly],['балка',t.beam],
-          ...t.holder.map(p=>['держатель',p]),['подложка',sim.padSection],['переходник',sim.adapter],['стол',sim.table]];
-        panels.forEach((panel,i)=>{
-          for(const cell of panel.cells){
-            const poly=cell.map(p=>vector(p).applyMatrix4(state.matrices[i]));
-            for(const [name,tool] of tools){
-              if(!tool.length || hit.has(name)) continue;
-              const skip=p=> name==='пуансон'?Math.hypot(p.x,p.y-state.tip)<sim.ctx.Ri+sim.ctx.S+1:
-                name==='матрица' && Math.abs(p.x)<sim.ctx.die.V/2+sim.ctx.S && p.y>=state.tip-sim.ctx.S-1;
-              if(LG.G.polyHits(poly,tool,skip).length || poly.some(p=>contains(tool,p)&&!skip(p))) hit.add(name);
+    const toolLength = span * 1.15;
+    const count = Math.max(1, Math.floor((toolLength + 50) / 200));
+    const centers = Array.from({ length: count }, (_, i) => (i - (count - 1) / 2) * 200);
+    const full = [[-toolLength / 2, toolLength / 2]];
+    const mounts = centers.map(z => [z - 75, z + 75]);
+    function clipDepth(poly, z, sign) {
+      const result = [];
+      poly.forEach((a, i) => {
+        const b = poly[(i + 1) % poly.length];
+        const inside = sign * (a.z - z) >= 0;
+        if (inside) result.push(a);
+        if (inside !== (sign * (b.z - z) >= 0)) result.push(a.clone().lerp(b, (z - a.z) / (b.z - a.z)));
+      });
+      return result;
+    }
+    function contacts(state, punchY, cur, f) {
+      const hit = new Set(), t = sim.tools(punchY);
+      const angle = 180 - Math.abs(angles[cur]) * f;
+      if (sim.ctx.punch.angle > angle + 0.5 || sim.ctx.die.angle > angle + 0.5) hit.add('угол инструмента');
+      const tools = [
+        ['пуансон', t.punch, full], ['пуансон', t.tang, full], ['матрица', sim.die.poly, full],
+        ['балка', t.beam, full], ...t.holder.map(p => ['держатель', p, mounts]),
+        ['подложка', sim.padSection, full], ['переходник', sim.adapter, full], ['стол', sim.table, full]
+      ].filter(([, poly]) => poly.length).map(([name,poly,ranges])=>({name,poly,ranges,box:LG.G.bounds(poly)}));
+      panels.forEach((panel, i) => {
+        for (const cell of panel.cells) {
+          const world = cell.map(p => vector(p).applyMatrix4(state.matrices[i]));
+          const box = LG.G.bounds(world), zs = world.map(p => p.z);
+          const z0 = Math.min(...zs), z1 = Math.max(...zs);
+          for (const tool of tools) {
+            const {name,poly,ranges} = tool;
+            if (hit.has(name) || box.x1 < tool.box.x0 || box.x0 > tool.box.x1 ||
+                box.y1 < tool.box.y0 || box.y0 > tool.box.y1) continue;
+            const skip = p => name === 'пуансон' ? Math.hypot(p.x,p.y-punchY) < sim.ctx.Ri+sim.ctx.S+1 :
+              name === 'матрица' && Math.abs(p.x)<sim.ctx.die.V/2+sim.ctx.S && p.y>=state.tip-sim.ctx.S-1;
+            for (const [lo,hi] of ranges) {
+              if (z1 < lo || z0 > hi) continue;
+              let face = world;
+              if (z0 < lo) face = clipDepth(face,lo,1);
+              if (z1 > hi) face = clipDepth(face,hi,-1);
+              if (face.length && (LG.G.polyHits(face,poly,skip).length ||
+                  face.some(p=>contains(poly,p) && !skip(p)) || poly.some(p=>contains(face,p) && !skip(p)))) {
+                hit.add(name); break;
+              }
             }
           }
-        });
+        }
+      });
+      return [...hit];
+    }
+    function checkStep(done,cur,mirror) {
+      const hits = new Map();
+      for (const f of [0,0.25,0.5,0.75,1]) {
+        const state = transform(done,cur,f,mirror);
+        for (const tool of contacts(state,state.tip,cur,f)) {
+          if (!hits.has(tool)) hits.set(tool,{tool,f});
+        }
       }
-      return [...hit].map(tool=>({tool}));
+      return [...hits.values()];
     }
     // Для развёртки номера из DXF не задают пространственный порядок.
     // Сначала пробуем крайние полки и линии с тем же направлением подачи.
@@ -177,7 +216,7 @@
       finish: (steps, auto) => ({ steps, auto, ok: steps.every(s => !s.hits.length) })
     };
     const plan=LG.Sim.prototype.plan.call(planner,null,160);
-    return {lines,angles,panels,hinges,span,transform,plan};
+    return {lines,angles,panels,hinges,span,transform,contacts,toolLength,centers,plan};
   }
   LG.FlatFold={axes,model,vector};
 })();
@@ -228,13 +267,12 @@
       return mark;
     });
     const steel={color:0xb2bdc8,edges:true}, frame={color:0x687b8f,edges:true};
-    const toolLength=m.span*1.15;
+    const {toolLength, centers} = m;
+    view.setPart('table',sim.table,toolLength,frame);
     view.setPart('die',sim.die.poly,toolLength,steel);
     view.setPart('adapter',sim.adapter,toolLength,frame);
     view.setPart('pad',sim.padSection,toolLength,frame);
     const moving=[view.setPart('punch',sim.punchLocal,toolLength,steel),view.setPart('tang',sim.tangLocal,toolLength,steel)];
-    const count=Math.max(1,Math.floor((toolLength+50)/200));
-    const centers=Array.from({length:count},(_,i)=>(i-(count-1)/2)*200);
     sim.holderSection.slice(0,5).forEach((poly,i)=>moving.push(view.setPart('mount'+i,poly,i===3?toolLength:150,frame,i===3?[0]:centers)));
     const steps=m.plan.steps;
     const ease=t=>(1-Math.cos(Math.PI*Math.max(0,Math.min(1,t))))/2;
@@ -254,7 +292,11 @@
         transfer.elements[13]+=m.span*.4*Math.sin(Math.PI*t);
         pose.matrices.forEach(mat=>mat.premultiply(transfer));
       }
-      meshes.forEach((mesh,i)=>{mesh.matrix.copy(pose.matrices[i]);mesh.matrixWorldNeedsUpdate=true;});
+      const hits = m.contacts(pose,y,s.bend,f);
+      meshes.forEach((mesh,i)=>{
+        mesh.matrix.copy(pose.matrices[i]); mesh.matrixWorldNeedsUpdate=true;
+        mesh.material.color.setHex(hits.length ? 0xff3b30 : 0x60809d);
+      });
       moving.forEach(group=>{group.position.y=y;});
       marks.forEach((mark,i)=>mark.material.color.setHex(i===s.bend?0xffa500:0x617489));
       view.render();
@@ -264,7 +306,7 @@
       report('Шаг '+(k+1)+' из '+steps.length+' · Г'+(s.bend+1)+' · '+phase+
         ' · сторона '+(m.angles[s.bend]>0?'A':'B')+' вверх'+(turn>.5?' · поворот '+Math.round(turn)+'°':'')+
         (previous && Math.sign(m.angles[s.bend])!==Math.sign(m.angles[previous.bend])?' · переворот':'')+
-        (s.hits.length?' · Возможный контакт: '+s.hits.map(h=>h.tool).join(', '):''));
+        (hits.length?' · Столкновение: '+hits.join(', '):''), hits.length > 0);
     }
     draw(0);view.target.set(0,sim.dieTop+m.span*.12,0);view.radius=Math.max(160,m.span*2.1);view.resize();
     return {
