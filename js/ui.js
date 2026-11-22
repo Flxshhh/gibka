@@ -1007,7 +1007,7 @@
         PLAYER.play();
         return;
       }
-      const dxfButton = q('#partDxfBtn, #flatDxfBtn, #profileDxfBtn');
+      const dxfButton = q('#mainPartDxfBtn, #partDxfBtn, #flatDxfBtn, #profileDxfBtn');
       if (dxfButton) {
         $('#partDxf').dataset.mode = dxfButton.id === 'flatDxfBtn' ? 'flat' : dxfButton.id === 'profileDxfBtn' ? 'profile' : 'auto';
         $('#partDxf').click();
