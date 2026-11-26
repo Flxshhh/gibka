@@ -381,7 +381,7 @@
     const steel={color:0xb2bdc8,edges:true}, frame={color:0x687b8f,edges:true};
     const {toolLength, centers} = m;
     view.setPart('table',sim.table,toolLength,frame);
-    view.setPart('die',sim.die.poly,toolLength,steel);
+    const die = view.setPart('die',sim.die.poly,toolLength,steel);
     view.setPart('adapter',sim.adapter,toolLength,frame);
     view.setPart('pad',sim.padSection,toolLength,frame);
     const moving=[];
@@ -425,6 +425,7 @@
     const ease=t=>(1-Math.cos(Math.PI*Math.max(0,Math.min(1,t))))/2;
     function draw(time, spatial=true, picture=false){
       view.sectionView = !spatial;
+      die.visible = !spatial;
       const k=Math.min(steps.length-1,Math.floor(time)),u=time-k,s=steps[k];
       const done=steps.slice(0,k).map(step=>step.bend);
       const f=ease((u-.4)/.42);
